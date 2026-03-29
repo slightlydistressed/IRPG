@@ -1,0 +1,49 @@
+import React from 'react';
+import { List, Highlighter, HelpCircle } from 'lucide-react';
+import { useApp } from '../context/AppContext';
+import TableOfContents from './TableOfContents';
+import HighlightPanel from './HighlightPanel';
+import QASection from './QASection';
+import type { SidebarTab } from '../types';
+
+const TABS: { id: SidebarTab; label: string; Icon: React.ElementType }[] = [
+  { id: 'toc', label: 'Contents', Icon: List },
+  { id: 'highlights', label: 'Highlights', Icon: Highlighter },
+  { id: 'qa', label: 'Q&A', Icon: HelpCircle },
+];
+
+export default function Sidebar() {
+  const { sidebarTab, setSidebarTab, sidebarOpen } = useApp();
+
+  if (!sidebarOpen) return null;
+
+  return (
+    <aside className="sidebar flex flex-col shrink-0 overflow-hidden">
+      {/* Tab bar */}
+      <div className="flex border-b border-[var(--color-border)]">
+        {TABS.map(({ id, label, Icon }) => (
+          <button
+            key={id}
+            onClick={() => setSidebarTab(id)}
+            className={`tab-btn flex-1 flex flex-col items-center gap-0.5 py-2 text-xs transition-colors ${
+              sidebarTab === id ? 'tab-btn-active' : ''
+            }`}
+            title={label}
+            aria-selected={sidebarTab === id}
+            role="tab"
+          >
+            <Icon size={16} />
+            <span>{label}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Tab content */}
+      <div className="flex-1 overflow-y-auto">
+        {sidebarTab === 'toc' && <TableOfContents />}
+        {sidebarTab === 'highlights' && <HighlightPanel />}
+        {sidebarTab === 'qa' && <QASection />}
+      </div>
+    </aside>
+  );
+}
