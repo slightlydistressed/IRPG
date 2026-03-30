@@ -259,11 +259,20 @@ export default function PDFViewer() {
   useEffect(() => {
     if (!selectedHighlightId) return;
     const h = highlights.find((hi) => hi.id === selectedHighlightId);
-    if (!h) return;
+    if (!h) {
+      const clearTimer = setTimeout(() => setSelectedHighlightId(null), HIGHLIGHT_FOCUS_DURATION_MS);
+      return () => clearTimeout(clearTimer);
+    }
     const container = containerRef.current;
-    if (!container) return;
+    if (!container) {
+      const clearTimer = setTimeout(() => setSelectedHighlightId(null), HIGHLIGHT_FOCUS_DURATION_MS);
+      return () => clearTimeout(clearTimer);
+    }
     const pageEl = pageRefs.current.get(h.page);
-    if (!pageEl) return;
+    if (!pageEl) {
+      const clearTimer = setTimeout(() => setSelectedHighlightId(null), HIGHLIGHT_FOCUS_DURATION_MS);
+      return () => clearTimeout(clearTimer);
+    }
 
     if (h.rects && h.rects.length > 0) {
       const containerRect = container.getBoundingClientRect();
