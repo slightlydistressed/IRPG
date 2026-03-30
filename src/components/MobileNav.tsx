@@ -1,12 +1,12 @@
 import React from 'react';
-import { List, Highlighter, HelpCircle } from 'lucide-react';
+import { List, Highlighter, ClipboardList } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { SidebarTab } from '../types';
 
 const TABS: { id: SidebarTab; label: string; Icon: React.ElementType }[] = [
   { id: 'toc',        label: 'Contents',   Icon: List         },
   { id: 'highlights', label: 'Highlights', Icon: Highlighter  },
-  { id: 'qa',         label: 'Q&A',        Icon: HelpCircle   },
+  { id: 'forms',      label: 'Forms',      Icon: ClipboardList },
 ];
 
 /**

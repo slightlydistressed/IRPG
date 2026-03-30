@@ -21,9 +21,9 @@ import {
 import type {
   Highlight,
   Bookmark,
-  QAPair,
   Theme,
   SidebarTab,
+  FormValues,
 } from '../types';
 
 // Migrate legacy single-bucket keys into per-document keys on first load.
@@ -80,12 +80,10 @@ interface AppState {
   removeBookmark: (id: string) => void;
   isBookmarked: (page: number) => boolean;
 
-  // Q&A
-  qaPairs: QAPair[];
-  updateAnswer: (id: string, answer: string) => void;
-  addQAPair: (question: string, page?: number) => void;
-  removeQAPair: (id: string) => void;
-  setQAPairs: (pairs: QAPair[]) => void;
+  // Forms / Checklists
+  formValues: FormValues;
+  setFormValue: (key: string, value: string) => void;
+  clearFormValues: () => void;
 
   /** True when a user-uploaded PDF is active (not the bundled irpg.pdf). */
   isUploadedPdf: boolean;
@@ -124,7 +122,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // Per-document persisted state ──────────────────────────────────────────
   const [highlights, setHighlights] = useDocStorage<Highlight[]>(documentId, 'highlights', []);
   const [bookmarks, setBookmarks] = useDocStorage<Bookmark[]>(documentId, 'bookmarks', []);
-  const [qaPairs, setQAPairs] = useDocStorage<QAPair[]>(documentId, 'qa', []);
+  const [formValues, setFormValues] = useDocStorage<FormValues>(documentId, 'forms', {});
   const [currentPage, setCurrentPage] = useDocStorage<number>(documentId, 'page', 1);
   const [scale, setScale] = useDocStorage<number>(documentId, 'scale', 1.2);
 
@@ -154,9 +152,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setNumPages(0);
     // Persist the uploaded file in IndexedDB so it can be restored on reload.
     if (file) {
-      savePdfToIdb(file).catch((err) =>
-        console.error('Could not save PDF to IndexedDB:', err),
-      );
+      // Warn the user when the file is large enough that some browsers may
+      // refuse to store it in IndexedDB (typical quota: 50–150 MB).
+      const MB = file.size / (1024 * 1024);
+      if (MB > 50) {
+        window.dispatchEvent(
+          new CustomEvent('irpg-app-warning', {
+            detail: `"${file.name}" is ${Math.round(MB)} MB. Large files may not be saved for offline use in all browsers.`,
+          }),
+        );
+      }
+      savePdfToIdb(file).catch((err) => {
+        console.error('Could not save PDF to IndexedDB:', err);
+        window.dispatchEvent(
+          new CustomEvent('irpg-app-warning', {
+            detail:
+              'Your PDF could not be saved for offline use. It will be available for this session only.',
+          }),
+        );
+      });
     }
   }, []);
 
@@ -287,35 +301,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [bookmarks],
   );
 
-  // Q&A
-  const updateAnswer = useCallback(
-    (id: string, answer: string) => {
-      setQAPairs((prev) =>
-        prev.map((qa) => (qa.id === id ? { ...qa, answer } : qa)),
-      );
+  // Forms / Checklists
+  const setFormValue = useCallback(
+    (key: string, value: string) => {
+      setFormValues((prev) => ({ ...prev, [key]: value }));
     },
-    [setQAPairs],
+    [setFormValues],
   );
 
-  const addQAPair = useCallback(
-    (question: string, page?: number) => {
-      const newPair: QAPair = {
-        id: `qa-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        question,
-        answer: '',
-        page,
-      };
-      setQAPairs((prev) => [...prev, newPair]);
-    },
-    [setQAPairs],
-  );
-
-  const removeQAPair = useCallback(
-    (id: string) => {
-      setQAPairs((prev) => prev.filter((qa) => qa.id !== id));
-    },
-    [setQAPairs],
-  );
+  const clearFormValues = useCallback(() => {
+    setFormValues({});
+  }, [setFormValues]);
 
   const scrollToPage = useCallback(
     (page: number) => {
@@ -357,11 +353,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         addBookmark,
         removeBookmark,
         isBookmarked,
-        qaPairs,
-        updateAnswer,
-        addQAPair,
-        removeQAPair,
-        setQAPairs,
+        formValues,
+        setFormValue,
+        clearFormValues,
         scrollToPage,
         scrollKey,
         isUploadedPdf: documentId !== BUILTIN_DOC_ID,

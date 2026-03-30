@@ -20,6 +20,15 @@ export function useLocalStorage<T>(key: string, initialValue: T) {
         });
       } catch (error) {
         console.error('localStorage error:', error);
+        // Notify the UI when the browser's storage quota is exceeded so the
+        // user knows their data was not saved instead of silently losing it.
+        if (
+          error instanceof DOMException &&
+          (error.name === 'QuotaExceededError' ||
+            error.name === 'NS_ERROR_DOM_QUOTA_REACHED')
+        ) {
+          window.dispatchEvent(new CustomEvent('irpg-storage-full'));
+        }
       }
     },
     [key],

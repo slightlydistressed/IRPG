@@ -8,12 +8,27 @@ import {
   X,
   Copy,
   Eraser,
-  MessageSquarePlus,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { HIGHLIGHT_COLORS } from '../types';
 
 type SortKey = 'newest' | 'oldest' | 'page-asc' | 'page-desc';
+
+/** Fallback clipboard copy using the legacy execCommand API. */
+function execCommandCopy(text: string, onSuccess: () => void) {
+  try {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.cssText = 'position:fixed;opacity:0;pointer-events:none';
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    if (document.execCommand('copy')) onSuccess();
+    document.body.removeChild(textarea);
+  } catch {
+    // execCommand also unavailable – nothing more we can do
+  }
+}
 
 export default function HighlightPanel() {
   const {
@@ -25,8 +40,6 @@ export default function HighlightPanel() {
     selectedHighlightId,
     setSelectedHighlightId,
     setSidebarOpen,
-    setSidebarTab,
-    addQAPair,
   } = useApp();
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -78,21 +91,21 @@ export default function HighlightPanel() {
       if (h.note) line += `\n  Note: ${h.note}`;
       return line;
     });
-    navigator.clipboard.writeText(lines.join('\n\n')).then(() => {
+    const text = lines.join('\n\n');
+
+    const onSuccess = () => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    });
-  }, [filtered]);
+    };
 
-  const handleSendToQA = useCallback(
-    (id: string) => {
-      const h = highlights.find((hi) => hi.id === id);
-      if (!h) return;
-      addQAPair(h.text, h.page);
-      setSidebarTab('qa');
-    },
-    [highlights, addQAPair, setSidebarTab],
-  );
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(onSuccess).catch(() => {
+        execCommandCopy(text, onSuccess);
+      });
+    } else {
+      execCommandCopy(text, onSuccess);
+    }
+  }, [filtered]);
 
   const handleClearAll = useCallback(() => {
     if (window.confirm('Delete all highlights? This cannot be undone.')) {
@@ -132,6 +145,7 @@ export default function HighlightPanel() {
             placeholder="Search highlights…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            aria-label="Search highlights"
           />
           {search && (
             <button
@@ -151,6 +165,7 @@ export default function HighlightPanel() {
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as SortKey)}
             title="Sort highlights"
+            aria-label="Sort highlights"
           >
             <option value="newest">Newest first</option>
             <option value="oldest">Oldest first</option>
@@ -294,14 +309,6 @@ export default function HighlightPanel() {
                     aria-label="Delete highlight"
                   >
                     <Trash2 size={14} />
-                  </button>
-                  <button
-                    onClick={() => handleSendToQA(h.id)}
-                    className="text-[var(--color-text-muted)] hover:text-[var(--color-accent)] transition-colors"
-                    title="Send to Q&A"
-                    aria-label="Send to Q&A"
-                  >
-                    <MessageSquarePlus size={14} />
                   </button>
                   <button
                     onClick={() =>

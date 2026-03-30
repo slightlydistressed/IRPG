@@ -33,7 +33,16 @@ export default function Header() {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file && file.type === 'application/pdf') {
+    if (file && file.type !== 'application/pdf') {
+      window.dispatchEvent(
+        new CustomEvent('irpg-app-warning', {
+          detail: `"${file.name}" is not a PDF file. Please select a valid PDF.`,
+        }),
+      );
+      e.target.value = '';
+      return;
+    }
+    if (file) {
       setPdfFile(file);
     }
     // Reset so the same file can be re-selected
@@ -94,6 +103,12 @@ export default function Header() {
                 ? 'Remove bookmark from current page'
                 : 'Bookmark current page'
             }
+            aria-label={
+              isBookmarked(currentPage)
+                ? `Remove bookmark from page ${currentPage}`
+                : `Bookmark page ${currentPage}`
+            }
+            aria-pressed={isBookmarked(currentPage)}
           >
             <BookmarkCheck size={20} />
           </button>
