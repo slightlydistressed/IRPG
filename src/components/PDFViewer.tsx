@@ -34,10 +34,10 @@ interface SelectionState {
   rects: HighlightRect[];
 }
 
-/** Walk the DOM to find the page number attribute */
 /** Tags that should not trigger keyboard shortcuts (focus is on interactive element) */
 const INTERACTIVE_TAGS = ['INPUT', 'TEXTAREA', 'SELECT', 'A', 'BUTTON'];
 
+/** Walk the DOM to find the page number attribute */
 function getPageFromNode(node: Node | null): number {
   let el = node instanceof Element ? node : node?.parentElement;
   while (el && el !== document.body) {
@@ -427,26 +427,37 @@ export default function PDFViewer() {
                 renderTextLayer
                 renderAnnotationLayer
               />
-              {/* Highlight overlays – rendered as absolutely positioned divs so they
-                  work reliably regardless of how react-pdf splits text into spans. */}
-              {highlights
-                .filter((h) => h.page === pg && h.rects && h.rects.length > 0)
-                .flatMap((h) =>
-                  h.rects!.map((r, i) => (
-                    <div
-                      key={`${h.id}-${i}`}
-                      className="absolute pointer-events-none dark:mix-blend-screen mix-blend-multiply"
-                      style={{
-                        left: `${r.left * 100}%`,
-                        top: `${r.top * 100}%`,
-                        width: `${r.width * 100}%`,
-                        height: `${r.height * 100}%`,
-                        backgroundColor: h.color,
-                        opacity: 0.55,
-                      }}
-                    />
-                  )),
-                )}
+              {/* Highlight overlay layer.
+                  z-index: 1 places this container above the PDF canvas (z-index auto)
+                  but below the text-selection layer (z-index 2) and annotation layer
+                  (z-index 3).  react-pdf__Page has only position:relative (no z-index)
+                  so it does not create a new stacking context, meaning all z-indexes
+                  here compare in the same ancestor context.
+                  Result: highlight color appears as a true background behind the
+                  rendered PDF text — text stays fully readable and selectable. */}
+              <div
+                className="absolute inset-0 pointer-events-none"
+                style={{ zIndex: 1 }}
+              >
+                {highlights
+                  .filter((h) => h.page === pg && h.rects && h.rects.length > 0)
+                  .flatMap((h) =>
+                    h.rects!.map((r, i) => (
+                      <div
+                        key={`${h.id}-${i}`}
+                        className="absolute dark:mix-blend-screen mix-blend-multiply"
+                        style={{
+                          left: `${r.left * 100}%`,
+                          top: `${r.top * 100}%`,
+                          width: `${r.width * 100}%`,
+                          height: `${r.height * 100}%`,
+                          backgroundColor: h.color,
+                          opacity: 0.6,
+                        }}
+                      />
+                    )),
+                  )}
+              </div>
             </div>
           ))}
         </Document>
