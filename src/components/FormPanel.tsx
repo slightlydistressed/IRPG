@@ -105,38 +105,6 @@ function FieldRenderer({ formId, field, value, onChange }: FieldRendererProps) {
   const inputClass =
     'input-base w-full text-sm';
 
-  // Checklist: each option gets its own persisted key
-  if (field.type === 'checklist' && field.options) {
-    return (
-      <fieldset className="border-none p-0 m-0">
-        <legend className="text-xs font-medium text-[var(--color-text)] mb-1.5">
-          {field.label}
-        </legend>
-        <div className="flex flex-col gap-1.5">
-          {field.options.map((opt, idx) => {
-            const optKey = `${formId}|${field.id}|${idx}`;
-            return (
-              <label key={idx} className="flex items-start gap-2 cursor-pointer group">
-                <input
-                  type="checkbox"
-                  className="mt-0.5 accent-[var(--color-accent)]"
-                  checked={value === 'true' || false}
-                  // Each option uses its own value from the parent; the parent
-                  // must pass the correct value per option. We pass optKey so
-                  // the parent can look up the right value.
-                  onChange={(e) => onChange(optKey, e.target.checked ? 'true' : '')}
-                />
-                <span className="text-sm text-[var(--color-text)] leading-snug group-hover:text-[var(--color-accent)]">
-                  {opt}
-                </span>
-              </label>
-            );
-          })}
-        </div>
-      </fieldset>
-    );
-  }
-
   // Single checkbox
   if (field.type === 'checkbox') {
     return (
@@ -213,6 +181,7 @@ function FieldRenderer({ formId, field, value, onChange }: FieldRendererProps) {
 interface ChecklistOptionProps {
   formId: string;
   fieldId: string;
+  label: string;
   index: number;
   options: string[];
   formValues: Record<string, string>;
@@ -222,12 +191,16 @@ interface ChecklistOptionProps {
 function ChecklistField({
   formId,
   fieldId,
+  label,
   options,
   formValues,
   setFormValue,
 }: Omit<ChecklistOptionProps, 'index'>) {
   return (
     <fieldset className="border-none p-0 m-0">
+      <legend className="text-xs font-medium text-[var(--color-text)] mb-1.5">
+        {label}
+      </legend>
       <div className="flex flex-col gap-1.5">
         {options.map((opt, idx) => {
           const optKey = `${formId}|${fieldId}|${idx}`;
@@ -314,18 +287,15 @@ function FormRenderer({
               {section.fields.map((field) => {
                 if (field.type === 'checklist' && field.options) {
                   return (
-                    <div key={field.id}>
-                      <p className="text-xs font-medium text-[var(--color-text)] mb-1.5">
-                        {field.label}
-                      </p>
-                      <ChecklistField
-                        formId={form.id}
-                        fieldId={field.id}
-                        options={field.options}
-                        formValues={formValues}
-                        setFormValue={setFormValue}
-                      />
-                    </div>
+                    <ChecklistField
+                      key={field.id}
+                      formId={form.id}
+                      fieldId={field.id}
+                      label={field.label}
+                      options={field.options}
+                      formValues={formValues}
+                      setFormValue={setFormValue}
+                    />
                   );
                 }
                 return (
@@ -435,17 +405,6 @@ export default function FormPanel() {
     },
     [scrollToPage, setSidebarOpen],
   );
-
-  if (!isBuiltin && availableForms.length === 0) {
-    return (
-      <div className="p-4 text-sm text-[var(--color-text-muted)] text-center">
-        <p>IRPG forms are only available for the bundled IRPG PDF.</p>
-        <p className="mt-1 text-xs">
-          Open the IRPG PDF to access forms and checklists.
-        </p>
-      </div>
-    );
-  }
 
   if (selectedForm) {
     return (

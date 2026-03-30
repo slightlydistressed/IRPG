@@ -33,16 +33,21 @@ export default function Header() {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file && file.type !== 'application/pdf') {
-      window.dispatchEvent(
-        new CustomEvent('irpg-app-warning', {
-          detail: `"${file.name}" is not a PDF file. Please select a valid PDF.`,
-        }),
-      );
-      e.target.value = '';
-      return;
-    }
     if (file) {
+      const isPdfMime = file.type === 'application/pdf';
+      const isUnknownType = !file.type;
+      const hasPdfExtension = /\.pdf$/i.test(file.name);
+
+      if (!isPdfMime && !isUnknownType && !hasPdfExtension) {
+        window.dispatchEvent(
+          new CustomEvent('irpg-app-warning', {
+            detail: `"${file.name}" is not a PDF file. Please select a valid PDF.`,
+          }),
+        );
+        e.target.value = '';
+        return;
+      }
+
       setPdfFile(file);
     }
     // Reset so the same file can be re-selected
