@@ -6,6 +6,12 @@ import React, {
   useEffect,
 } from 'react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
+import { useDocStorage } from '../hooks/useDocStorage';
+import {
+  BUILTIN_DOC_ID,
+  getDocumentId,
+  migrateGlobalData,
+} from '../utils/docStorage';
 import type {
   Highlight,
   Bookmark,
@@ -14,12 +20,18 @@ import type {
   SidebarTab,
 } from '../types';
 
+// Migrate legacy single-bucket keys into per-document keys on first load.
+// Runs once synchronously when the module is imported (before any render).
+migrateGlobalData();
+
 interface AppState {
   // PDF
   pdfFile: File | null;
   setPdfFile: (file: File | null) => void;
   pdfLoading: boolean;
   pdfName: string;
+  /** Stable identifier for the currently open document. */
+  documentId: string;
   currentPage: number;
   setCurrentPage: (page: number) => void;
   numPages: number;
@@ -68,17 +80,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [pdfFile, setPdfFileState] = useState<File | null>(null);
   const [pdfLoading, setPdfLoading] = useState(true);
   const [pdfName, setPdfName] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
   const [numPages, setNumPages] = useState(0);
-  const [scale, setScale] = useState(1.2);
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>('toc');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [scrollKey, setScrollKey] = useState(0);
 
+  // documentId scopes all per-document storage.  Starts as the bundled PDF's
+  // stable ID; changes when the user uploads a different file.
+  const [documentId, setDocumentId] = useState<string>(BUILTIN_DOC_ID);
+
   const [theme, setTheme] = useLocalStorage<Theme>('irpg-theme', 'light');
-  const [highlights, setHighlights] = useLocalStorage<Highlight[]>('irpg-highlights', []);
-  const [bookmarks, setBookmarks] = useLocalStorage<Bookmark[]>('irpg-bookmarks', []);
-  const [qaPairs, setQAPairs] = useLocalStorage<QAPair[]>('irpg-qa', []);
+
+  // Per-document persisted state ──────────────────────────────────────────
+  const [highlights, setHighlights] = useDocStorage<Highlight[]>(documentId, 'highlights', []);
+  const [bookmarks, setBookmarks] = useDocStorage<Bookmark[]>(documentId, 'bookmarks', []);
+  const [qaPairs, setQAPairs] = useDocStorage<QAPair[]>(documentId, 'qa', []);
+  const [currentPage, setCurrentPage] = useDocStorage<number>(documentId, 'page', 1);
+  const [scale, setScale] = useDocStorage<number>(documentId, 'scale', 1.2);
 
   // Apply theme to document
   useEffect(() => {
@@ -96,13 +114,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const setPdfFile = useCallback((file: File | null) => {
     setPdfFileState(file);
     setPdfName(file ? file.name : '');
-    setCurrentPage(1);
+    // Assign a new documentId so per-document hooks load the correct storage
+    // slot for this file.  The bundled PDF keeps BUILTIN_DOC_ID (see
+    // auto-load effect below).
+    setDocumentId(file ? getDocumentId(file) : BUILTIN_DOC_ID);
     setNumPages(0);
   }, []);
 
   // Auto-load the bundled IRPG PDF on first mount.
-  // Use import.meta.env.BASE_URL so the path is correct for both root ('/') and
-  // subpath ('/IRPG/') deployments (e.g. GitHub Pages).
+  // We set file state directly (not via setPdfFile) so documentId stays as
+  // BUILTIN_DOC_ID – its initial value – and we load the correct saved state.
   useEffect(() => {
     fetch(import.meta.env.BASE_URL + 'irpg.pdf')
       .then((res) => {
@@ -111,11 +132,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       })
       .then((blob) => {
         const file = new File([blob], 'irpg.pdf', { type: 'application/pdf' });
-        setPdfFile(file);
+        setPdfFileState(file);
+        setPdfName('irpg.pdf');
       })
       .catch((err) => console.error('Could not auto-load irpg.pdf:', err))
       .finally(() => setPdfLoading(false));
-  }, [setPdfFile]);
+  }, []); // intentionally empty – runs once on mount
 
   // Highlights
   const addHighlight = useCallback(
@@ -232,6 +254,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setPdfFile,
         pdfLoading,
         pdfName,
+        documentId,
         currentPage,
         setCurrentPage,
         numPages,
