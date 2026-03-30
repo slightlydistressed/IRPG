@@ -96,6 +96,63 @@ public/
 | Word export | docx + file-saver |
 | Icons | lucide-react |
 
+## Deployment (GitHub Pages)
+
+The repository includes a GitHub Actions workflow (`.github/workflows/deploy.yml`) that automatically lints, builds, and deploys the app to GitHub Pages on every push to `main`.
+
+### 1. Enable GitHub Pages
+
+1. Go to **Settings → Pages** in this repository.
+2. Under **Build and deployment → Source**, select **GitHub Actions**.
+3. Save. The first deployment will run automatically on the next push to `main`, or you can trigger it manually from the **Actions** tab.
+
+Your site will be available at:
+```
+https://slightlydistressed.github.io/IRPG/
+```
+
+### 2. Add a Custom Domain
+
+If you want the site to be served from your own domain (e.g. `irpg.yourdomain.com`):
+
+#### Step 1 — Create the CNAME file
+
+Add a file called `public/CNAME` containing only your domain name (no `https://`, no trailing slash):
+
+```
+irpg.yourdomain.com
+```
+
+Committing this file ensures GitHub never loses the domain setting between deployments.
+
+#### Step 2 — Configure DNS
+
+Log in to your domain registrar and add a DNS record pointing to GitHub Pages:
+
+| Record type | Host / Name | Value |
+|-------------|-------------|-------|
+| `CNAME` | `irpg` (subdomain) | `slightlydistressed.github.io` |
+
+> For an **apex domain** (e.g. `yourdomain.com` with no subdomain) use four `A` records pointing to GitHub's IP addresses instead: `185.199.108.153`, `185.199.109.153`, `185.199.110.153`, `185.199.111.153`.
+
+DNS changes can take a few minutes to a few hours to propagate.
+
+#### Step 3 — Update the workflow base path
+
+Open `.github/workflows/deploy.yml` and change the `VITE_BASE_URL` environment variable from `/IRPG/` to `/`:
+
+```yaml
+env:
+  VITE_BASE_URL: /
+```
+
+This tells Vite to build assets relative to the domain root rather than the `/IRPG/` sub-path.
+
+#### Step 4 — Confirm in GitHub Settings
+
+1. Go to **Settings → Pages → Custom domain** and enter your domain.
+2. Tick **Enforce HTTPS** once GitHub has provisioned a TLS certificate (usually within a few minutes of DNS propagating).
+
 ## License
 
 This project is private. All rights reserved.
