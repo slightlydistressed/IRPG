@@ -18,6 +18,7 @@ interface AppState {
   // PDF
   pdfFile: File | null;
   setPdfFile: (file: File | null) => void;
+  pdfLoading: boolean;
   pdfName: string;
   currentPage: number;
   setCurrentPage: (page: number) => void;
@@ -58,6 +59,7 @@ const AppContext = createContext<AppState | null>(null);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [pdfFile, setPdfFileState] = useState<File | null>(null);
+  const [pdfLoading, setPdfLoading] = useState(true);
   const [pdfName, setPdfName] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [numPages, setNumPages] = useState(0);
@@ -101,7 +103,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const file = new File([blob], 'irpg.pdf', { type: 'application/pdf' });
         setPdfFile(file);
       })
-      .catch((err) => console.error('Could not auto-load irpg.pdf:', err));
+      .catch((err) => console.error('Could not auto-load irpg.pdf:', err))
+      .finally(() => setPdfLoading(false));
   }, [setPdfFile]);
 
   // Highlights
@@ -196,6 +199,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       value={{
         pdfFile,
         setPdfFile,
+        pdfLoading,
         pdfName,
         currentPage,
         setCurrentPage,

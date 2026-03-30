@@ -95,6 +95,7 @@ function applyHighlightsToPage(
 export default function PDFViewer() {
   const {
     pdfFile,
+    pdfLoading,
     currentPage,
     setCurrentPage,
     numPages,
@@ -114,6 +115,8 @@ export default function PDFViewer() {
   const [selection, setSelection] = useState<SelectionState | null>(null);
   const [chosenColor, setChosenColor] = useState<string>(HIGHLIGHT_COLORS[0].value);
   const [renderedPages, setRenderedPages] = useState<Set<number>>(new Set());
+  const [pageInputValue, setPageInputValue] = useState('');
+  const [isEditingPage, setIsEditingPage] = useState(false);
 
   // Re-apply highlights whenever they change or new pages render
   useEffect(() => {
@@ -250,7 +253,49 @@ export default function PDFViewer() {
     return () => observers.forEach((o) => o.disconnect());
   }, [numPages, setCurrentPage]);
 
+  // Keyboard shortcuts: ArrowLeft/Right and PageUp/Down for page navigation
+  // Only fires when focus is not on an interactive element to avoid conflicts.
+  useEffect(() => {
+    if (!pdfFile || numPages === 0) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'A' || tag === 'BUTTON') return;
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'PageUp') {
+        e.preventDefault();
+        setCurrentPage(Math.max(1, currentPage - 1));
+      } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === 'PageDown') {
+        e.preventDefault();
+        setCurrentPage(Math.min(numPages, currentPage + 1));
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [pdfFile, numPages, currentPage, setCurrentPage]);
+
+  const commitPageInput = useCallback(() => {
+    const parsed = parseInt(pageInputValue, 10);
+    if (!isNaN(parsed) && parsed >= 1 && parsed <= numPages) {
+      setCurrentPage(parsed);
+    }
+    setIsEditingPage(false);
+  }, [pageInputValue, numPages, setCurrentPage]);
+
+  const handleStartPageEdit = useCallback(() => {
+    setPageInputValue(String(currentPage));
+    setIsEditingPage(true);
+  }, [currentPage]);
+
   if (!pdfFile) {
+    if (pdfLoading) {
+      return (
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center p-8">
+            <div className="text-4xl mb-4 animate-spin">⏳</div>
+            <p className="text-[var(--color-text-muted)] text-sm">Loading IRPG…</p>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="flex-1 flex items-center justify-center">
         <div className="text-center p-8 max-w-md">
@@ -283,18 +328,39 @@ export default function PDFViewer() {
             className="btn-icon"
             onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
             disabled={currentPage <= 1}
-            title="Previous page"
+            title="Previous page (←)"
           >
             <ChevronLeft size={18} />
           </button>
-          <span className="text-sm font-mono text-[var(--color-text)] min-w-[80px] text-center">
-            {currentPage} / {numPages}
-          </span>
+          {isEditingPage ? (
+            <input
+              type="number"
+              className="input-base text-sm font-mono text-center min-w-[60px] max-w-[60px] px-1 py-0.5"
+              value={pageInputValue}
+              min={1}
+              max={numPages}
+              onChange={(e) => setPageInputValue(e.target.value)}
+              onBlur={commitPageInput}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') commitPageInput();
+                if (e.key === 'Escape') setIsEditingPage(false);
+              }}
+              autoFocus
+            />
+          ) : (
+            <button
+              className="text-sm font-mono text-[var(--color-text)] min-w-[80px] text-center hover:bg-[var(--color-border)]/40 rounded px-1 py-0.5 transition-colors"
+              onClick={handleStartPageEdit}
+              title="Click to jump to a page"
+            >
+              {currentPage} / {numPages}
+            </button>
+          )}
           <button
             className="btn-icon"
             onClick={() => setCurrentPage(Math.min(numPages, currentPage + 1))}
             disabled={currentPage >= numPages}
-            title="Next page"
+            title="Next page (→)"
           >
             <ChevronRight size={18} />
           </button>
