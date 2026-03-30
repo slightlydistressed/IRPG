@@ -14,25 +14,17 @@ import {
   ChevronLeft,
   ChevronRight,
   Highlighter,
-  X,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { HIGHLIGHT_COLORS } from '../types';
-import type { HighlightRect } from '../types';
+import type { HighlightRect, SelectionState } from '../types';
+import HighlightToolbar from './HighlightToolbar';
 
 // Configure PDF.js worker
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.min.mjs',
   import.meta.url,
 ).toString();
-
-interface SelectionState {
-  text: string;
-  page: number;
-  x: number;
-  y: number;
-  rects: HighlightRect[];
-}
 
 /** Tags that should not trigger keyboard shortcuts (focus is on interactive element) */
 const INTERACTIVE_TAGS = ['INPUT', 'TEXTAREA', 'SELECT', 'A', 'BUTTON'];
@@ -74,6 +66,9 @@ export default function PDFViewer() {
   const [chosenColor, setChosenColor] = useState<string>(HIGHLIGHT_COLORS[0].value);
   const [pageInputValue, setPageInputValue] = useState('');
   const [isEditingPage, setIsEditingPage] = useState(false);
+
+  // Debounce timer for the selectionchange fallback (mobile touch handles).
+  const selectionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const onDocumentLoadSuccess = useCallback(
     async ({ numPages: n }: { numPages: number }) => {
@@ -125,26 +120,30 @@ export default function PDFViewer() {
     [setNumPages, pdfFile, qaPairs.length, setQAPairs],
   );
 
-  // Handle text selection – capture bounding rects relative to the page element
-  // so highlight overlays render correctly at any zoom level.
-  const handleMouseUp = useCallback(() => {
+  /**
+   * Read the current browser selection and convert it into a `SelectionState`
+   * if the selection is non-empty and falls within the PDF container.
+   * Returns `null` if no usable selection is found.
+   *
+   * Called from both the `onPointerUp` handler (immediate, desktop/stylus)
+   * and the debounced `selectionchange` listener (mobile touch handles).
+   */
+  const captureCurrentSelection = useCallback((): SelectionState | null => {
     const sel = window.getSelection();
-    if (!sel || sel.isCollapsed || !sel.toString().trim()) {
-      setSelection(null);
-      return;
-    }
+    if (!sel || sel.isCollapsed || !sel.toString().trim()) return null;
 
     const text = sel.toString().trim();
     const page = getPageFromNode(sel.anchorNode);
-    if (!page) return;
+    if (!page) return null;
 
     const range = sel.getRangeAt(0);
     const selRect = range.getBoundingClientRect();
-    const containerRect = containerRef.current?.getBoundingClientRect();
-    if (!containerRect) return;
+    const containerEl = containerRef.current;
+    const containerRect = containerEl?.getBoundingClientRect();
+    if (!containerRect) return null;
 
     // Build normalised rects (fraction of page dimensions) for the overlay divs.
-    const pageEl = containerRef.current?.querySelector<HTMLElement>(
+    const pageEl = containerEl?.querySelector<HTMLElement>(
       `[data-page-number="${page}"]`,
     );
     const pageRect = pageEl?.getBoundingClientRect();
@@ -160,16 +159,69 @@ export default function PDFViewer() {
         }));
     }
 
-    // Account for scroll offset so the floating toolbar appears above the selection
-    const scrollTop = containerRef.current?.scrollTop ?? 0;
-    setSelection({
+    const scrollTop = containerEl?.scrollTop ?? 0;
+    return {
       text,
       page,
       x: selRect.left - containerRect.left + selRect.width / 2,
-      y: selRect.top - containerRect.top + scrollTop - 8,
+      yTop: selRect.top - containerRect.top + scrollTop,
+      yBottom: selRect.bottom - containerRect.top + scrollTop,
       rects,
-    });
-  }, []);
+    };
+  }, []); // containerRef is a stable ref – no deps needed
+
+  /**
+   * Pointer-up handler on the PDF container.
+   *
+   * `pointerup` fires for mouse, touch, and pen input (unlike `mouseup` which
+   * only fires for mouse).  This covers the common desktop/stylus case and
+   * also handles single-tap dismissal (pointer released with empty selection).
+   */
+  const handlePointerUp = useCallback(() => {
+    const captured = captureCurrentSelection();
+    if (captured) {
+      setSelection(captured);
+    } else {
+      // Pointer released with no active selection – dismiss any open toolbar.
+      setSelection(null);
+    }
+  }, [captureCurrentSelection]);
+
+  /**
+   * Debounced `selectionchange` listener.
+   *
+   * On mobile/tablet, the user drags OS-provided text-selection handles to
+   * extend their selection.  During that gesture the browser consumes the
+   * touch stream, so no `pointerup` event reaches our handler.  Listening to
+   * `selectionchange` on the document – debounced so we only act once the
+   * user pauses – fills that gap.
+   */
+  useEffect(() => {
+    const onSelectionChange = () => {
+      if (selectionTimerRef.current !== null) clearTimeout(selectionTimerRef.current);
+      selectionTimerRef.current = setTimeout(() => {
+        selectionTimerRef.current = null;
+        const sel = window.getSelection();
+        if (!sel || sel.isCollapsed || !sel.toString().trim()) return;
+
+        // Only act when the selection anchor is inside our container.
+        const container = containerRef.current;
+        if (!container) return;
+        const anchor = sel.anchorNode;
+        const anchorEl = anchor instanceof Element ? anchor : anchor?.parentElement;
+        if (!anchorEl || !container.contains(anchorEl)) return;
+
+        const captured = captureCurrentSelection();
+        if (captured) setSelection(captured);
+      }, 350);
+    };
+
+    document.addEventListener('selectionchange', onSelectionChange);
+    return () => {
+      document.removeEventListener('selectionchange', onSelectionChange);
+      if (selectionTimerRef.current !== null) clearTimeout(selectionTimerRef.current);
+    };
+  }, [captureCurrentSelection]);
 
   const handleHighlight = useCallback(() => {
     if (!selection) return;
@@ -394,7 +446,7 @@ export default function PDFViewer() {
       <div
         ref={containerRef}
         className="flex-1 overflow-y-auto pdf-container relative select-text"
-        onMouseUp={handleMouseUp}
+        onPointerUp={handlePointerUp}
       >
         <Document
           file={pdfFile}
@@ -462,43 +514,16 @@ export default function PDFViewer() {
           ))}
         </Document>
 
-        {/* Floating highlight toolbar */}
+        {/* Floating highlight toolbar – viewport-clamped via HighlightToolbar */}
         {selection && (
-          <div
-            className="absolute z-20 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg shadow-xl p-2 flex items-center gap-2"
-            style={{
-              left: `${Math.max(0, selection.x - 80)}px`,
-              top: `${Math.max(0, selection.y - 60)}px`,
-            }}
-          >
-            <Highlighter size={14} className="text-[var(--color-text-muted)]" />
-            {HIGHLIGHT_COLORS.map((c) => (
-              <button
-                key={c.value}
-                onClick={() => setChosenColor(c.value)}
-                className={`w-5 h-5 rounded-full border-2 transition-transform ${
-                  chosenColor === c.value
-                    ? 'border-[var(--color-accent)] scale-125'
-                    : 'border-[var(--color-border)] hover:scale-110'
-                }`}
-                style={{ backgroundColor: c.value }}
-                title={c.label}
-              />
-            ))}
-            <button
-              onClick={handleHighlight}
-              className="btn-primary btn-sm ml-1 flex items-center gap-1"
-            >
-              <Highlighter size={12} />
-              Highlight
-            </button>
-            <button
-              onClick={dismissSelection}
-              className="btn-icon text-[var(--color-text-muted)]"
-            >
-              <X size={14} />
-            </button>
-          </div>
+          <HighlightToolbar
+            selection={selection}
+            chosenColor={chosenColor}
+            onColorChange={setChosenColor}
+            onHighlight={handleHighlight}
+            onDismiss={dismissSelection}
+            containerRef={containerRef}
+          />
         )}
       </div>
     </div>
