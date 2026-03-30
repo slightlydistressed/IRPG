@@ -40,6 +40,8 @@ interface AppState {
   addHighlight: (h: Omit<Highlight, 'id' | 'createdAt'>) => void;
   removeHighlight: (id: string) => void;
   updateHighlightNote: (id: string, note: string) => void;
+  updateHighlightColor: (id: string, color: string) => void;
+  clearAllHighlights: () => void;
 
   // Bookmarks
   bookmarks: Bookmark[];
@@ -142,6 +144,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [setHighlights],
   );
 
+  const updateHighlightColor = useCallback(
+    (id: string, color: string) => {
+      setHighlights((prev) =>
+        prev.map((h) => (h.id === id ? { ...h, color } : h)),
+      );
+    },
+    [setHighlights],
+  );
+
+  const clearAllHighlights = useCallback(() => {
+    setHighlights([]);
+  }, [setHighlights]);
+
   // Bookmarks
   const addBookmark = useCallback(
     (title: string, page: number) => {
@@ -231,6 +246,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         addHighlight,
         removeHighlight,
         updateHighlightNote,
+        updateHighlightColor,
+        clearAllHighlights,
         bookmarks,
         addBookmark,
         removeBookmark,

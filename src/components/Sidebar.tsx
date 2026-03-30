@@ -13,7 +13,7 @@ const TABS: { id: SidebarTab; label: string; Icon: React.ElementType }[] = [
 ];
 
 export default function Sidebar() {
-  const { sidebarTab, setSidebarTab, sidebarOpen } = useApp();
+  const { sidebarTab, setSidebarTab, sidebarOpen, highlights } = useApp();
 
   if (!sidebarOpen) return null;
 
@@ -32,7 +32,17 @@ export default function Sidebar() {
             aria-selected={sidebarTab === id}
             role="tab"
           >
-            <Icon size={16} />
+            <div className="relative">
+              <Icon size={16} />
+              {id === 'highlights' && highlights.length > 0 && (
+                <span
+                  className="absolute -top-1.5 -right-2 inline-flex items-center justify-center min-w-[14px] h-[14px] px-0.5 rounded-full bg-[var(--color-accent)] text-white text-[9px] font-bold leading-none"
+                  aria-label={`${highlights.length} highlight${highlights.length !== 1 ? 's' : ''}`}
+                >
+                  {highlights.length > 99 ? '99+' : highlights.length}
+                </span>
+              )}
+            </div>
             <span>{label}</span>
           </button>
         ))}
