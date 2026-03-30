@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { HIGHLIGHT_COLORS } from '../types';
+import type { HighlightRect } from '../types';
 
 // Configure PDF.js worker
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
@@ -30,9 +31,13 @@ interface SelectionState {
   page: number;
   x: number;
   y: number;
+  rects: HighlightRect[];
 }
 
 /** Walk the DOM to find the page number attribute */
+/** Tags that should not trigger keyboard shortcuts (focus is on interactive element) */
+const INTERACTIVE_TAGS = ['INPUT', 'TEXTAREA', 'SELECT', 'A', 'BUTTON'];
+
 function getPageFromNode(node: Node | null): number {
   let el = node instanceof Element ? node : node?.parentElement;
   while (el && el !== document.body) {
@@ -41,55 +46,6 @@ function getPageFromNode(node: Node | null): number {
     el = el.parentElement;
   }
   return 0;
-}
-
-/** Apply visual highlights to a rendered page's text layer */
-function applyHighlightsToPage(
-  container: HTMLElement,
-  pageNumber: number,
-  highlights: { id: string; text: string; page: number; color: string }[],
-) {
-  const textLayer = container.querySelector<HTMLElement>(
-    `[data-page-number="${pageNumber}"] .react-pdf__Page__textContent`,
-  );
-  if (!textLayer) return;
-
-  // Remove existing mark elements first (re-render safety)
-  textLayer.querySelectorAll('mark[data-highlight-id]').forEach((m) => {
-    const parent = m.parentNode;
-    if (parent) {
-      parent.replaceChild(document.createTextNode(m.textContent ?? ''), m);
-      parent.normalize();
-    }
-  });
-
-  const pageHighlights = highlights.filter((h) => h.page === pageNumber);
-  for (const h of pageHighlights) {
-    const walker = document.createTreeWalker(
-      textLayer,
-      NodeFilter.SHOW_TEXT,
-    );
-    let node: Text | null;
-    while ((node = walker.nextNode() as Text | null)) {
-      const txt = node.textContent ?? '';
-      const idx = txt.indexOf(h.text);
-      if (idx === -1) continue;
-      try {
-        const range = document.createRange();
-        range.setStart(node, idx);
-        range.setEnd(node, idx + h.text.length);
-        const mark = document.createElement('mark');
-        mark.style.backgroundColor = h.color;
-        mark.style.color = 'inherit';
-        mark.style.borderRadius = '2px';
-        mark.dataset.highlightId = h.id;
-        range.surroundContents(mark);
-      } catch {
-        // surroundContents can throw if range crosses elements
-      }
-      break;
-    }
-  }
 }
 
 export default function PDFViewer() {
@@ -105,26 +61,19 @@ export default function PDFViewer() {
     addHighlight,
     highlights,
     setSidebarTab,
+    setSidebarOpen,
     setQAPairs,
     qaPairs,
     pdfName,
+    scrollKey,
   } = useApp();
 
   const containerRef = useRef<HTMLDivElement>(null);
   const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const [selection, setSelection] = useState<SelectionState | null>(null);
   const [chosenColor, setChosenColor] = useState<string>(HIGHLIGHT_COLORS[0].value);
-  const [renderedPages, setRenderedPages] = useState<Set<number>>(new Set());
   const [pageInputValue, setPageInputValue] = useState('');
   const [isEditingPage, setIsEditingPage] = useState(false);
-
-  // Re-apply highlights whenever they change or new pages render
-  useEffect(() => {
-    if (!containerRef.current) return;
-    renderedPages.forEach((pg) => {
-      applyHighlightsToPage(containerRef.current!, pg, highlights);
-    });
-  }, [highlights, renderedPages]);
 
   const onDocumentLoadSuccess = useCallback(
     async ({ numPages: n }: { numPages: number }) => {
@@ -176,63 +125,81 @@ export default function PDFViewer() {
     [setNumPages, pdfFile, qaPairs.length, setQAPairs],
   );
 
-  // Handle text selection
-  const handleMouseUp = useCallback(
-    () => {
-      const sel = window.getSelection();
-      if (!sel || sel.isCollapsed || !sel.toString().trim()) {
-        setSelection(null);
-        return;
-      }
+  // Handle text selection – capture bounding rects relative to the page element
+  // so highlight overlays render correctly at any zoom level.
+  const handleMouseUp = useCallback(() => {
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed || !sel.toString().trim()) {
+      setSelection(null);
+      return;
+    }
 
-      const text = sel.toString().trim();
-      const page = getPageFromNode(sel.anchorNode);
-      if (!page) return;
+    const text = sel.toString().trim();
+    const page = getPageFromNode(sel.anchorNode);
+    if (!page) return;
 
-      const range = sel.getRangeAt(0);
-      const rect = range.getBoundingClientRect();
-      const containerRect = containerRef.current?.getBoundingClientRect();
+    const range = sel.getRangeAt(0);
+    const selRect = range.getBoundingClientRect();
+    const containerRect = containerRef.current?.getBoundingClientRect();
+    if (!containerRect) return;
 
-      if (!containerRect) return;
+    // Build normalised rects (fraction of page dimensions) for the overlay divs.
+    const pageEl = containerRef.current?.querySelector<HTMLElement>(
+      `[data-page-number="${page}"]`,
+    );
+    const pageRect = pageEl?.getBoundingClientRect();
+    let rects: HighlightRect[] = [];
+    if (pageRect && pageRect.width > 0 && pageRect.height > 0) {
+      rects = Array.from(range.getClientRects())
+        .filter((r) => r.width > 1 && r.height > 1)
+        .map((r) => ({
+          left: (r.left - pageRect.left) / pageRect.width,
+          top: (r.top - pageRect.top) / pageRect.height,
+          width: r.width / pageRect.width,
+          height: r.height / pageRect.height,
+        }));
+    }
 
-      setSelection({
-        text,
-        page,
-        x: rect.left - containerRect.left + rect.width / 2,
-        y: rect.top - containerRect.top - 8,
-      });
-    },
-    [],
-  );
+    // Account for scroll offset so the floating toolbar appears above the selection
+    const scrollTop = containerRef.current?.scrollTop ?? 0;
+    setSelection({
+      text,
+      page,
+      x: selRect.left - containerRect.left + selRect.width / 2,
+      y: selRect.top - containerRect.top + scrollTop - 8,
+      rects,
+    });
+  }, []);
 
   const handleHighlight = useCallback(() => {
     if (!selection) return;
-    addHighlight({ text: selection.text, page: selection.page, color: chosenColor, note: '' });
+    addHighlight({
+      text: selection.text,
+      page: selection.page,
+      color: chosenColor,
+      note: '',
+      rects: selection.rects,
+    });
+    // Open the sidebar on the Highlights tab so the user can see the new entry
+    setSidebarOpen(true);
     setSidebarTab('highlights');
     window.getSelection()?.removeAllRanges();
     setSelection(null);
-  }, [selection, chosenColor, addHighlight, setSidebarTab]);
+  }, [selection, chosenColor, addHighlight, setSidebarTab, setSidebarOpen]);
 
   const dismissSelection = useCallback(() => {
     window.getSelection()?.removeAllRanges();
     setSelection(null);
   }, []);
 
-  const handlePageRenderSuccess = useCallback((pageNumber: number) => {
-    setRenderedPages((prev) => {
-      const next = new Set(prev);
-      next.add(pageNumber);
-      return next;
-    });
-  }, []);
-
-  // Scroll to page when currentPage changes
+  // Scroll to page when currentPage changes or when a force-scroll is requested
   useEffect(() => {
     const el = pageRefs.current.get(currentPage);
     if (el) {
       el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
-  }, [currentPage]);
+  // scrollKey intentionally forces a re-run even when currentPage hasn't changed
+  }, [currentPage, scrollKey]);
 
   // Track visible page via IntersectionObserver
   useEffect(() => {
@@ -259,7 +226,7 @@ export default function PDFViewer() {
     if (!pdfFile || numPages === 0) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement).tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'A' || tag === 'BUTTON') return;
+      if (INTERACTIVE_TAGS.includes(tag)) return;
       if (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'PageUp') {
         e.preventDefault();
         setCurrentPage(Math.max(1, currentPage - 1));
@@ -452,15 +419,34 @@ export default function PDFViewer() {
                 else pageRefs.current.delete(pg);
               }}
               data-page-number={pg}
-              className="shadow-lg"
+              className="shadow-lg relative"
             >
               <Page
                 pageNumber={pg}
                 scale={scale}
                 renderTextLayer
                 renderAnnotationLayer
-                onRenderSuccess={() => handlePageRenderSuccess(pg)}
               />
+              {/* Highlight overlays – rendered as absolutely positioned divs so they
+                  work reliably regardless of how react-pdf splits text into spans. */}
+              {highlights
+                .filter((h) => h.page === pg && h.rects && h.rects.length > 0)
+                .flatMap((h) =>
+                  h.rects!.map((r, i) => (
+                    <div
+                      key={`${h.id}-${i}`}
+                      className="absolute pointer-events-none dark:mix-blend-screen mix-blend-multiply"
+                      style={{
+                        left: `${r.left * 100}%`,
+                        top: `${r.top * 100}%`,
+                        width: `${r.width * 100}%`,
+                        height: `${r.height * 100}%`,
+                        backgroundColor: h.color,
+                        opacity: 0.55,
+                      }}
+                    />
+                  )),
+                )}
             </div>
           ))}
         </Document>

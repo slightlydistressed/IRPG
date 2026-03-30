@@ -4,7 +4,7 @@ import { useApp } from '../context/AppContext';
 import { HIGHLIGHT_COLORS } from '../types';
 
 export default function HighlightPanel() {
-  const { highlights, removeHighlight, updateHighlightNote, setCurrentPage } =
+  const { highlights, removeHighlight, updateHighlightNote, scrollToPage, setSidebarOpen } =
     useApp();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editingNote, setEditingNote] = useState<{ id: string; value: string } | null>(null);
@@ -47,7 +47,12 @@ export default function HighlightPanel() {
             {/* Text + meta */}
             <div
               className="flex-1 min-w-0 cursor-pointer"
-              onClick={() => setCurrentPage(h.page)}
+              onClick={() => {
+                scrollToPage(h.page);
+                // On small screens the sidebar overlays the PDF – close it so the
+                // highlighted passage is visible.
+                if (window.innerWidth < 640) setSidebarOpen(false);
+              }}
             >
               <p className="text-sm line-clamp-3 text-[var(--color-text)] leading-snug">
                 "{h.text}"

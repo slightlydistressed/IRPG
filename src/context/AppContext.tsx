@@ -53,6 +53,11 @@ interface AppState {
   addQAPair: (question: string, page?: number) => void;
   removeQAPair: (id: string) => void;
   setQAPairs: (pairs: QAPair[]) => void;
+
+  // Navigation
+  /** Scrolls to the given page even if currentPage is already set to that value. */
+  scrollToPage: (page: number) => void;
+  scrollKey: number;
 }
 
 const AppContext = createContext<AppState | null>(null);
@@ -66,6 +71,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [scale, setScale] = useState(1.2);
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>('toc');
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [scrollKey, setScrollKey] = useState(0);
 
   const [theme, setTheme] = useLocalStorage<Theme>('irpg-theme', 'light');
   const [highlights, setHighlights] = useLocalStorage<Highlight[]>('irpg-highlights', []);
@@ -194,6 +200,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [setQAPairs],
   );
 
+  const scrollToPage = useCallback(
+    (page: number) => {
+      setCurrentPage(page);
+      setScrollKey((k) => k + 1);
+    },
+    [setCurrentPage],
+  );
+
   return (
     <AppContext.Provider
       value={{
@@ -226,6 +240,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         addQAPair,
         removeQAPair,
         setQAPairs,
+        scrollToPage,
+        scrollKey,
       }}
     >
       {children}
