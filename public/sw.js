@@ -1,10 +1,15 @@
 /* IRPG PDF Reader – Service Worker (offline cache) */
 const CACHE_NAME = 'irpg-cache-v1';
 
+// Derive the base path from the service worker script URL so this file works
+// correctly whether the app is served at the root ('/') or a sub-path like
+// '/IRPG/'. E.g. '/IRPG/sw.js' → BASE_PATH = '/IRPG'
+const BASE_PATH = self.location.pathname.replace(/\/sw\.js$/, '');
+
 // Assets to pre-cache on install
 const PRECACHE_URLS = [
-  '/',
-  '/index.html',
+  BASE_PATH + '/',
+  BASE_PATH + '/index.html',
 ];
 
 self.addEventListener('install', (event) => {
@@ -55,7 +60,7 @@ self.addEventListener('fetch', (event) => {
         .catch(() => {
           // Offline fallback: return cached index.html for navigation requests
           if (event.request.mode === 'navigate') {
-            return caches.match('/index.html');
+            return caches.match(BASE_PATH + '/index.html');
           }
           return new Response('Offline', { status: 503 });
         });
