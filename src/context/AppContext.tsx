@@ -100,9 +100,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setNumPages(0);
   }, []);
 
-  // Auto-load the bundled IRPG PDF on first mount
+  // Auto-load the bundled IRPG PDF on first mount.
+  // Use import.meta.env.BASE_URL so the path is correct for both root ('/') and
+  // subpath ('/IRPG/') deployments (e.g. GitHub Pages).
   useEffect(() => {
-    fetch('/irpg.pdf')
+    fetch(import.meta.env.BASE_URL + 'irpg.pdf')
       .then((res) => {
         if (!res.ok) throw new Error('Failed to fetch irpg.pdf');
         return res.blob();
