@@ -8,7 +8,6 @@ import {
   X,
   Copy,
   Eraser,
-  MessageSquarePlus,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { HIGHLIGHT_COLORS } from '../types';
@@ -41,8 +40,6 @@ export default function HighlightPanel() {
     selectedHighlightId,
     setSelectedHighlightId,
     setSidebarOpen,
-    setSidebarTab,
-    addQAPair,
   } = useApp();
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -109,16 +106,6 @@ export default function HighlightPanel() {
       execCommandCopy(text, onSuccess);
     }
   }, [filtered]);
-
-  const handleSendToQA = useCallback(
-    (id: string) => {
-      const h = highlights.find((hi) => hi.id === id);
-      if (!h) return;
-      addQAPair(h.text, h.page);
-      setSidebarTab('qa');
-    },
-    [highlights, addQAPair, setSidebarTab],
-  );
 
   const handleClearAll = useCallback(() => {
     if (window.confirm('Delete all highlights? This cannot be undone.')) {
@@ -322,14 +309,6 @@ export default function HighlightPanel() {
                     aria-label="Delete highlight"
                   >
                     <Trash2 size={14} />
-                  </button>
-                  <button
-                    onClick={() => handleSendToQA(h.id)}
-                    className="text-[var(--color-text-muted)] hover:text-[var(--color-accent)] transition-colors"
-                    title="Send to Q&A"
-                    aria-label="Send to Q&A"
-                  >
-                    <MessageSquarePlus size={14} />
                   </button>
                   <button
                     onClick={() =>

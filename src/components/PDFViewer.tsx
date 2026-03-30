@@ -57,8 +57,6 @@ export default function PDFViewer() {
     highlights,
     setSidebarTab,
     setSidebarOpen,
-    setQAPairs,
-    qaPairs,
     pdfName,
     scrollKey,
     selectedHighlightId,
@@ -78,53 +76,10 @@ export default function PDFViewer() {
   const selectionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const onDocumentLoadSuccess = useCallback(
-    async ({ numPages: n }: { numPages: number }) => {
+    ({ numPages: n }: { numPages: number }) => {
       setNumPages(n);
-
-      // Extract questions from the PDF text
-      if (pdfFile && qaPairs.length === 0) {
-        try {
-          const { getDocument } = await import('pdfjs-dist');
-          const ab = await pdfFile.arrayBuffer();
-          const pdf = await getDocument({ data: ab }).promise;
-          const allQuestions: { question: string; page: number }[] = [];
-          // Limit extraction to first 50 pages to avoid blocking the UI
-          const pagesToScan = Math.min(n, 50);
-
-          for (let i = 1; i <= pagesToScan; i++) {
-            const page = await pdf.getPage(i);
-            const tc = await page.getTextContent();
-            const text = tc.items
-              .filter((it) => 'str' in it)
-              .map((it) => (it as { str: string }).str)
-              .join(' ');
-
-            // Match sentences ending in ?
-            const matches = text.match(/[^.!?]*\?/g) ?? [];
-            matches.forEach((m) => {
-              const q = m.trim();
-              if (q.length > 10 && q.length < 500) {
-                allQuestions.push({ question: q, page: i });
-              }
-            });
-          }
-
-          if (allQuestions.length > 0) {
-            setQAPairs(
-              allQuestions.map(({ question, page }, idx) => ({
-                id: `qa-pdf-${idx}-${Date.now()}`,
-                question,
-                answer: '',
-                page,
-              })),
-            );
-          }
-        } catch (err) {
-          console.error('Question extraction failed:', err);
-        }
-      }
     },
-    [setNumPages, pdfFile, qaPairs.length, setQAPairs],
+    [setNumPages],
   );
 
   /**

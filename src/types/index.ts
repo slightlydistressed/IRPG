@@ -1,5 +1,5 @@
 export type Theme = 'light' | 'dark';
-export type SidebarTab = 'toc' | 'highlights' | 'qa';
+export type SidebarTab = 'toc' | 'highlights' | 'forms';
 
 /**
  * A highlight's bounding rectangle expressed as fractions of the containing
@@ -69,3 +69,57 @@ export const HIGHLIGHT_COLORS = [
   { label: 'Pink', value: '#f9a8d4' },
   { label: 'Orange', value: '#fdba74' },
 ] as const;
+
+// ── Forms / Checklists ────────────────────────────────────────────────────
+
+export type FieldType =
+  | 'text'
+  | 'textarea'
+  | 'richText'
+  | 'checklist'
+  | 'checkbox'
+  | 'date'
+  | 'time'
+  | 'number';
+
+export type DeviceActionType = 'geolocation' | 'currentDate' | 'currentTime';
+
+export interface DeviceAction {
+  type: DeviceActionType;
+  buttonLabel: string;
+  allowManualOverride: boolean;
+}
+
+export interface FormField {
+  id: string;
+  label: string;
+  type: FieldType;
+  placeholder?: string;
+  /** Option labels used by the 'checklist' type. */
+  options?: string[];
+  deviceAction?: DeviceAction;
+}
+
+export interface FormSection {
+  id: string;
+  title: string;
+  fields: FormField[];
+}
+
+export interface FormSchema {
+  id: string;
+  title: string;
+  /** When true, this form is only shown for the bundled IRPG PDF. */
+  irpgOnly?: boolean;
+  /** PDF page that most closely relates to this form. */
+  relatedPage?: number;
+  description?: string;
+  sections: FormSection[];
+}
+
+/**
+ * Persisted user-entered values for all forms in a document, keyed by:
+ *   `${formId}|${fieldId}`          – for text, textarea, date, time, number, checkbox
+ *   `${formId}|${fieldId}|${index}` – for each option in a checklist field
+ */
+export type FormValues = Record<string, string>;
