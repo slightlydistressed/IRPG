@@ -2,6 +2,7 @@ import { AppProvider } from './context/AppContext';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import PDFViewer from './components/PDFViewer';
+import MobileNav from './components/MobileNav';
 
 function App() {
   return (
@@ -14,6 +15,7 @@ function App() {
             <PDFViewer />
           </main>
         </div>
+        <MobileNav />
       </div>
     </AppProvider>
   );

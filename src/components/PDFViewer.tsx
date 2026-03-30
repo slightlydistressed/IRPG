@@ -379,8 +379,8 @@ export default function PDFViewer() {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Toolbar */}
-      <div className="viewer-toolbar flex items-center gap-2 px-3 py-1.5 border-b border-[var(--color-border)] shrink-0 flex-wrap">
-        <div className="flex items-center gap-1">
+      <div className="viewer-toolbar flex items-center gap-2 px-3 py-1.5 border-b border-[var(--color-border)] shrink-0 overflow-x-auto">
+        <div className="flex items-center gap-1 shrink-0">
           <button
             className="btn-icon"
             onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
@@ -425,7 +425,7 @@ export default function PDFViewer() {
 
         <div className="w-px h-5 bg-[var(--color-border)]" />
 
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 shrink-0">
           <button
             className="btn-icon"
             onClick={() => setScale(Math.max(0.5, scale - 0.1))}
@@ -454,9 +454,10 @@ export default function PDFViewer() {
           </button>
         </div>
 
-        <div className="w-px h-5 bg-[var(--color-border)]" />
+        {/* Colour pre-selector – hidden on mobile (the floating HighlightToolbar has its own) */}
+        <div className="hidden sm:block w-px h-5 bg-[var(--color-border)]" />
 
-        <div className="flex items-center gap-1">
+        <div className="hidden sm:flex items-center gap-1 shrink-0">
           <Highlighter size={14} className="text-[var(--color-text-muted)]" />
           {HIGHLIGHT_COLORS.map((c) => (
             <button
