@@ -154,9 +154,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setNumPages(0);
     // Persist the uploaded file in IndexedDB so it can be restored on reload.
     if (file) {
-      savePdfToIdb(file).catch((err) =>
-        console.error('Could not save PDF to IndexedDB:', err),
-      );
+      // Warn the user when the file is large enough that some browsers may
+      // refuse to store it in IndexedDB (typical quota: 50–150 MB).
+      const MB = file.size / (1024 * 1024);
+      if (MB > 50) {
+        window.dispatchEvent(
+          new CustomEvent('irpg-app-warning', {
+            detail: `"${file.name}" is ${Math.round(MB)} MB. Large files may not be saved for offline use in all browsers.`,
+          }),
+        );
+      }
+      savePdfToIdb(file).catch((err) => {
+        console.error('Could not save PDF to IndexedDB:', err);
+        window.dispatchEvent(
+          new CustomEvent('irpg-app-warning', {
+            detail:
+              'Your PDF could not be saved for offline use. It will be available for this session only.',
+          }),
+        );
+      });
     }
   }, []);
 

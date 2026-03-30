@@ -71,6 +71,8 @@ export default function PDFViewer() {
   const [chosenColor, setChosenColor] = useState<string>(HIGHLIGHT_COLORS[0].value);
   const [pageInputValue, setPageInputValue] = useState('');
   const [isEditingPage, setIsEditingPage] = useState(false);
+  // Incremented to force a Document remount when the user clicks "Try Again".
+  const [pdfDocKey, setPdfDocKey] = useState(0);
 
   // Debounce timer for the selectionchange fallback (mobile touch handles).
   const selectionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -395,6 +397,7 @@ export default function PDFViewer() {
             onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
             disabled={currentPage <= 1}
             title="Previous page (←)"
+            aria-label="Previous page"
           >
             <ChevronLeft size={18} />
           </button>
@@ -418,6 +421,7 @@ export default function PDFViewer() {
               className="text-sm font-mono text-[var(--color-text)] min-w-[80px] text-center hover:bg-[var(--color-border)]/40 rounded px-1 py-0.5 transition-colors"
               onClick={handleStartPageEdit}
               title="Click to jump to a page"
+              aria-label={`Page ${currentPage} of ${numPages}. Click to jump to a page.`}
             >
               {currentPage} / {numPages}
             </button>
@@ -427,6 +431,7 @@ export default function PDFViewer() {
             onClick={() => setCurrentPage(Math.min(numPages, currentPage + 1))}
             disabled={currentPage >= numPages}
             title="Next page (→)"
+            aria-label="Next page"
           >
             <ChevronRight size={18} />
           </button>
@@ -440,10 +445,11 @@ export default function PDFViewer() {
             onClick={() => setScale(Math.max(0.5, scale - 0.1))}
             disabled={scale <= 0.5}
             title="Zoom out"
+            aria-label="Zoom out"
           >
             <ZoomOut size={18} />
           </button>
-          <span className="text-sm font-mono text-[var(--color-text)] min-w-[52px] text-center">
+          <span className="text-sm font-mono text-[var(--color-text)] min-w-[52px] text-center" aria-live="polite" aria-label={`Zoom level ${Math.round(scale * 100)} percent`}>
             {Math.round(scale * 100)}%
           </span>
           <button
@@ -451,6 +457,7 @@ export default function PDFViewer() {
             onClick={() => setScale(Math.min(3, scale + 0.1))}
             disabled={scale >= 3}
             title="Zoom in"
+            aria-label="Zoom in"
           >
             <ZoomIn size={18} />
           </button>
@@ -458,6 +465,7 @@ export default function PDFViewer() {
             className="btn-icon"
             onClick={() => setScale(1.2)}
             title="Reset zoom"
+            aria-label="Reset zoom"
           >
             <RotateCcw size={14} />
           </button>
@@ -497,6 +505,7 @@ export default function PDFViewer() {
         onPointerUp={handlePointerUp}
       >
         <Document
+          key={pdfDocKey}
           file={pdfFile}
           onLoadSuccess={onDocumentLoadSuccess}
           loading={
@@ -505,8 +514,14 @@ export default function PDFViewer() {
             </div>
           }
           error={
-            <div className="flex items-center justify-center h-64 text-red-500">
-              Failed to load PDF. Please try another file.
+            <div className="flex flex-col items-center justify-center h-64 gap-3">
+              <p className="text-red-500 text-sm">Failed to load PDF.</p>
+              <button
+                className="btn-primary btn-sm"
+                onClick={() => setPdfDocKey((k) => k + 1)}
+              >
+                Try Again
+              </button>
             </div>
           }
           className="flex flex-col items-center gap-4 py-4"

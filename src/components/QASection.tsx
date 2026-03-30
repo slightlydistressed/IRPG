@@ -41,13 +41,18 @@ function EmailModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+    <div
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="email-modal-title"
+    >
       <div className="card w-full max-w-sm">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-semibold text-[var(--color-text)]">
+          <h3 id="email-modal-title" className="font-semibold text-[var(--color-text)]">
             Email Q&amp;A Answers
           </h3>
-          <button onClick={onClose} className="btn-icon">
+          <button onClick={onClose} className="btn-icon" aria-label="Close dialog">
             <X size={18} />
           </button>
         </div>
@@ -246,6 +251,8 @@ export default function QASection() {
                     }
                     className="text-[var(--color-text-muted)] hover:text-[var(--color-accent)]"
                     title="Toggle answer"
+                    aria-label={expandedId === qa.id ? 'Collapse answer' : 'Expand answer'}
+                    aria-expanded={expandedId === qa.id}
                   >
                     {expandedId === qa.id ? (
                       <ChevronUp size={14} />
@@ -257,6 +264,7 @@ export default function QASection() {
                     onClick={() => removeQAPair(qa.id)}
                     className="text-[var(--color-text-muted)] hover:text-red-500"
                     title="Remove question"
+                    aria-label="Remove question"
                   >
                     <Trash2 size={14} />
                   </button>
