@@ -28,7 +28,7 @@ export default function Sidebar() {
 
       <aside className={`sidebar flex flex-col shrink-0 overflow-hidden${sidebarOpen ? ' sidebar-open' : ''}`}>
         {/* Tab bar */}
-        <div className="flex border-b border-[var(--color-border)]">
+        <div className="flex border-b border-[var(--color-border)] shrink-0" role="tablist">
           {TABS.map(({ id, label, Icon }) => (
             <button
               key={id}

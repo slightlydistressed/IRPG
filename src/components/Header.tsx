@@ -70,7 +70,7 @@ export default function Header() {
   return (
     <header className="header flex items-center justify-between px-4 py-2 shadow-md z-10 shrink-0">
       {/* Left: Home button + sidebar toggle + doc name */}
-      <div className="flex items-center gap-3 min-w-0">
+      <div className="flex items-center gap-1 min-w-0">
         <button
           onClick={goHome}
           className="btn-icon"
@@ -93,23 +93,27 @@ export default function Header() {
           )}
         </button>
 
-        <div className="flex items-center gap-2 font-bold text-lg text-white truncate">
-          <BookOpen size={22} className="shrink-0" />
-          <span className="hidden sm:inline truncate">
+        <div className="w-px h-5 bg-white/20 mx-2 shrink-0" />
+
+        <div className="flex items-center gap-2 font-semibold text-sm text-white truncate min-w-0">
+          <BookOpen size={18} className="shrink-0 opacity-80" />
+          <span className="hidden sm:inline truncate opacity-90">
             {pdfName || 'IRPG PDF Reader'}
           </span>
         </div>
       </div>
 
-      {/* Center: Page indicator */}
+      {/* Center: Page indicator pill */}
       {numPages > 0 && (
-        <div className="text-white/80 text-sm font-mono hidden md:block">
-          Page {currentPage} / {numPages}
+        <div className="text-white/75 text-xs font-mono hidden md:flex items-center gap-1 bg-white/10 px-3 py-1 rounded-full shrink-0">
+          <span>{currentPage}</span>
+          <span className="opacity-50">/</span>
+          <span>{numPages}</span>
         </div>
       )}
 
       {/* Right: Actions */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5">
         {pdfName && numPages > 0 && (
           <button
             onClick={handleBookmarkCurrent}
@@ -135,7 +139,7 @@ export default function Header() {
           className="btn-primary flex items-center gap-1.5 text-sm"
           title="Upload a PDF file"
         >
-          <Upload size={16} />
+          <Upload size={15} />
           <span className="hidden sm:inline">Open PDF</span>
         </button>
 
@@ -154,7 +158,7 @@ export default function Header() {
           title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
           aria-label="Toggle dark/light mode"
         >
-          {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
+          {theme === 'dark' ? <Sun size={19} /> : <Moon size={19} />}
         </button>
       </div>
     </header>

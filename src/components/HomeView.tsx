@@ -61,13 +61,13 @@ export default function HomeView() {
     <div className="home-view">
       {/* Top bar */}
       <header className="home-topbar">
-        <div className="flex items-center gap-2.5 text-white font-semibold text-base">
-          <BookOpen size={20} className="shrink-0" />
+        <div className="flex items-center gap-2.5 text-white font-semibold text-sm tracking-tight">
+          <BookOpen size={19} className="shrink-0 opacity-90" />
           <span>IRPG Reader</span>
         </div>
         <button
           onClick={toggleTheme}
-          className="btn-icon text-white/80 hover:text-white"
+          className="btn-icon text-white/75 hover:text-white"
           title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
           aria-label="Toggle dark/light mode"
         >
@@ -82,7 +82,7 @@ export default function HomeView() {
           <div className="home-hero">
             <h1 className="home-title">Your Field Library</h1>
             <p className="home-subtitle">
-              Open the built-in IRPG, reopen a saved PDF, or upload your own.
+              Open the built-in IRPG, reopen a saved PDF, or upload your own document.
             </p>
           </div>
 
@@ -145,7 +145,7 @@ export default function HomeView() {
                   </div>
                   <div className="home-doc-info">
                     <p className="home-doc-name">{savedUploadedName}</p>
-                    <p className="home-doc-meta">Saved locally on this device</p>
+                    <p className="home-doc-meta">Saved on this device · local only</p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <button
