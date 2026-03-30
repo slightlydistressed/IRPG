@@ -1,6 +1,18 @@
 export type Theme = 'light' | 'dark';
 export type SidebarTab = 'toc' | 'highlights' | 'qa';
 
+/**
+ * A highlight's bounding rectangle expressed as fractions of the containing
+ * page element's width/height (0–1).  Storing percentages keeps the overlay
+ * scale-invariant so highlights render correctly at any zoom level.
+ */
+export interface HighlightRect {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
 export interface Highlight {
   id: string;
   text: string;
@@ -8,6 +20,8 @@ export interface Highlight {
   color: string;
   note: string;
   createdAt: string;
+  /** Positional data used to render overlay divs instead of manipulating the text layer. */
+  rects?: HighlightRect[];
 }
 
 export interface Bookmark {

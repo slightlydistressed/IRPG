@@ -18,6 +18,7 @@ interface AppState {
   // PDF
   pdfFile: File | null;
   setPdfFile: (file: File | null) => void;
+  pdfLoading: boolean;
   pdfName: string;
   currentPage: number;
   setCurrentPage: (page: number) => void;
@@ -39,6 +40,8 @@ interface AppState {
   addHighlight: (h: Omit<Highlight, 'id' | 'createdAt'>) => void;
   removeHighlight: (id: string) => void;
   updateHighlightNote: (id: string, note: string) => void;
+  updateHighlightColor: (id: string, color: string) => void;
+  clearAllHighlights: () => void;
 
   // Bookmarks
   bookmarks: Bookmark[];
@@ -52,18 +55,25 @@ interface AppState {
   addQAPair: (question: string, page?: number) => void;
   removeQAPair: (id: string) => void;
   setQAPairs: (pairs: QAPair[]) => void;
+
+  // Navigation
+  /** Scrolls to the given page even if currentPage is already set to that value. */
+  scrollToPage: (page: number) => void;
+  scrollKey: number;
 }
 
 const AppContext = createContext<AppState | null>(null);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [pdfFile, setPdfFileState] = useState<File | null>(null);
+  const [pdfLoading, setPdfLoading] = useState(true);
   const [pdfName, setPdfName] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [numPages, setNumPages] = useState(0);
   const [scale, setScale] = useState(1.2);
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>('toc');
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [scrollKey, setScrollKey] = useState(0);
 
   const [theme, setTheme] = useLocalStorage<Theme>('irpg-theme', 'light');
   const [highlights, setHighlights] = useLocalStorage<Highlight[]>('irpg-highlights', []);
@@ -89,6 +99,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setCurrentPage(1);
     setNumPages(0);
   }, []);
+
+  // Auto-load the bundled IRPG PDF on first mount
+  useEffect(() => {
+    fetch('/irpg.pdf')
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed to fetch irpg.pdf');
+        return res.blob();
+      })
+      .then((blob) => {
+        const file = new File([blob], 'irpg.pdf', { type: 'application/pdf' });
+        setPdfFile(file);
+      })
+      .catch((err) => console.error('Could not auto-load irpg.pdf:', err))
+      .finally(() => setPdfLoading(false));
+  }, [setPdfFile]);
 
   // Highlights
   const addHighlight = useCallback(
@@ -118,6 +143,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     },
     [setHighlights],
   );
+
+  const updateHighlightColor = useCallback(
+    (id: string, color: string) => {
+      setHighlights((prev) =>
+        prev.map((h) => (h.id === id ? { ...h, color } : h)),
+      );
+    },
+    [setHighlights],
+  );
+
+  const clearAllHighlights = useCallback(() => {
+    setHighlights([]);
+  }, [setHighlights]);
 
   // Bookmarks
   const addBookmark = useCallback(
@@ -177,11 +215,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [setQAPairs],
   );
 
+  const scrollToPage = useCallback(
+    (page: number) => {
+      setCurrentPage(page);
+      setScrollKey((k) => k + 1);
+    },
+    [setCurrentPage],
+  );
+
   return (
     <AppContext.Provider
       value={{
         pdfFile,
         setPdfFile,
+        pdfLoading,
         pdfName,
         currentPage,
         setCurrentPage,
@@ -199,6 +246,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         addHighlight,
         removeHighlight,
         updateHighlightNote,
+        updateHighlightColor,
+        clearAllHighlights,
         bookmarks,
         addBookmark,
         removeBookmark,
@@ -208,6 +257,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         addQAPair,
         removeQAPair,
         setQAPairs,
+        scrollToPage,
+        scrollKey,
       }}
     >
       {children}

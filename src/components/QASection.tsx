@@ -97,6 +97,7 @@ export default function QASection() {
     updateAnswer,
     addQAPair,
     removeQAPair,
+    setQAPairs,
     pdfName,
     pdfFile,
   } = useApp();
@@ -113,6 +114,12 @@ export default function QASection() {
     addQAPair(q);
     setNewQuestion('');
     setShowAddForm(false);
+  };
+
+  const handleClearAll = () => {
+    if (window.confirm('Remove all questions? This cannot be undone.')) {
+      setQAPairs([]);
+    }
   };
 
   const handleExportWord = async () => {
@@ -148,14 +155,26 @@ export default function QASection() {
         <span className="text-xs text-[var(--color-text-muted)]">
           {answeredCount}/{qaPairs.length} answered
         </span>
-        <button
-          onClick={() => setShowAddForm(!showAddForm)}
-          className="btn-sm flex items-center gap-1"
-          title="Add a question"
-        >
-          <Plus size={13} />
-          Add
-        </button>
+        <div className="flex items-center gap-1">
+          {qaPairs.length > 0 && (
+            <button
+              onClick={handleClearAll}
+              className="btn-sm btn-ghost flex items-center gap-1 text-[var(--color-text-muted)] hover:text-red-500"
+              title="Clear all questions"
+            >
+              <Trash2 size={13} />
+              Clear
+            </button>
+          )}
+          <button
+            onClick={() => setShowAddForm(!showAddForm)}
+            className="btn-sm flex items-center gap-1"
+            title="Add a question"
+          >
+            <Plus size={13} />
+            Add
+          </button>
+        </div>
       </div>
 
       {/* Add question form */}

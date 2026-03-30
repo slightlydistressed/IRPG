@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { HIGHLIGHT_COLORS } from '../types';
+import type { HighlightRect } from '../types';
 
 // Configure PDF.js worker
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
@@ -30,7 +31,11 @@ interface SelectionState {
   page: number;
   x: number;
   y: number;
+  rects: HighlightRect[];
 }
+
+/** Tags that should not trigger keyboard shortcuts (focus is on interactive element) */
+const INTERACTIVE_TAGS = ['INPUT', 'TEXTAREA', 'SELECT', 'A', 'BUTTON'];
 
 /** Walk the DOM to find the page number attribute */
 function getPageFromNode(node: Node | null): number {
@@ -43,58 +48,10 @@ function getPageFromNode(node: Node | null): number {
   return 0;
 }
 
-/** Apply visual highlights to a rendered page's text layer */
-function applyHighlightsToPage(
-  container: HTMLElement,
-  pageNumber: number,
-  highlights: { id: string; text: string; page: number; color: string }[],
-) {
-  const textLayer = container.querySelector<HTMLElement>(
-    `[data-page-number="${pageNumber}"] .react-pdf__Page__textContent`,
-  );
-  if (!textLayer) return;
-
-  // Remove existing mark elements first (re-render safety)
-  textLayer.querySelectorAll('mark[data-highlight-id]').forEach((m) => {
-    const parent = m.parentNode;
-    if (parent) {
-      parent.replaceChild(document.createTextNode(m.textContent ?? ''), m);
-      parent.normalize();
-    }
-  });
-
-  const pageHighlights = highlights.filter((h) => h.page === pageNumber);
-  for (const h of pageHighlights) {
-    const walker = document.createTreeWalker(
-      textLayer,
-      NodeFilter.SHOW_TEXT,
-    );
-    let node: Text | null;
-    while ((node = walker.nextNode() as Text | null)) {
-      const txt = node.textContent ?? '';
-      const idx = txt.indexOf(h.text);
-      if (idx === -1) continue;
-      try {
-        const range = document.createRange();
-        range.setStart(node, idx);
-        range.setEnd(node, idx + h.text.length);
-        const mark = document.createElement('mark');
-        mark.style.backgroundColor = h.color;
-        mark.style.color = 'inherit';
-        mark.style.borderRadius = '2px';
-        mark.dataset.highlightId = h.id;
-        range.surroundContents(mark);
-      } catch {
-        // surroundContents can throw if range crosses elements
-      }
-      break;
-    }
-  }
-}
-
 export default function PDFViewer() {
   const {
     pdfFile,
+    pdfLoading,
     currentPage,
     setCurrentPage,
     numPages,
@@ -104,24 +61,19 @@ export default function PDFViewer() {
     addHighlight,
     highlights,
     setSidebarTab,
+    setSidebarOpen,
     setQAPairs,
     qaPairs,
     pdfName,
+    scrollKey,
   } = useApp();
 
   const containerRef = useRef<HTMLDivElement>(null);
   const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const [selection, setSelection] = useState<SelectionState | null>(null);
   const [chosenColor, setChosenColor] = useState<string>(HIGHLIGHT_COLORS[0].value);
-  const [renderedPages, setRenderedPages] = useState<Set<number>>(new Set());
-
-  // Re-apply highlights whenever they change or new pages render
-  useEffect(() => {
-    if (!containerRef.current) return;
-    renderedPages.forEach((pg) => {
-      applyHighlightsToPage(containerRef.current!, pg, highlights);
-    });
-  }, [highlights, renderedPages]);
+  const [pageInputValue, setPageInputValue] = useState('');
+  const [isEditingPage, setIsEditingPage] = useState(false);
 
   const onDocumentLoadSuccess = useCallback(
     async ({ numPages: n }: { numPages: number }) => {
@@ -173,63 +125,81 @@ export default function PDFViewer() {
     [setNumPages, pdfFile, qaPairs.length, setQAPairs],
   );
 
-  // Handle text selection
-  const handleMouseUp = useCallback(
-    () => {
-      const sel = window.getSelection();
-      if (!sel || sel.isCollapsed || !sel.toString().trim()) {
-        setSelection(null);
-        return;
-      }
+  // Handle text selection – capture bounding rects relative to the page element
+  // so highlight overlays render correctly at any zoom level.
+  const handleMouseUp = useCallback(() => {
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed || !sel.toString().trim()) {
+      setSelection(null);
+      return;
+    }
 
-      const text = sel.toString().trim();
-      const page = getPageFromNode(sel.anchorNode);
-      if (!page) return;
+    const text = sel.toString().trim();
+    const page = getPageFromNode(sel.anchorNode);
+    if (!page) return;
 
-      const range = sel.getRangeAt(0);
-      const rect = range.getBoundingClientRect();
-      const containerRect = containerRef.current?.getBoundingClientRect();
+    const range = sel.getRangeAt(0);
+    const selRect = range.getBoundingClientRect();
+    const containerRect = containerRef.current?.getBoundingClientRect();
+    if (!containerRect) return;
 
-      if (!containerRect) return;
+    // Build normalised rects (fraction of page dimensions) for the overlay divs.
+    const pageEl = containerRef.current?.querySelector<HTMLElement>(
+      `[data-page-number="${page}"]`,
+    );
+    const pageRect = pageEl?.getBoundingClientRect();
+    let rects: HighlightRect[] = [];
+    if (pageRect && pageRect.width > 0 && pageRect.height > 0) {
+      rects = Array.from(range.getClientRects())
+        .filter((r) => r.width > 1 && r.height > 1)
+        .map((r) => ({
+          left: (r.left - pageRect.left) / pageRect.width,
+          top: (r.top - pageRect.top) / pageRect.height,
+          width: r.width / pageRect.width,
+          height: r.height / pageRect.height,
+        }));
+    }
 
-      setSelection({
-        text,
-        page,
-        x: rect.left - containerRect.left + rect.width / 2,
-        y: rect.top - containerRect.top - 8,
-      });
-    },
-    [],
-  );
+    // Account for scroll offset so the floating toolbar appears above the selection
+    const scrollTop = containerRef.current?.scrollTop ?? 0;
+    setSelection({
+      text,
+      page,
+      x: selRect.left - containerRect.left + selRect.width / 2,
+      y: selRect.top - containerRect.top + scrollTop - 8,
+      rects,
+    });
+  }, []);
 
   const handleHighlight = useCallback(() => {
     if (!selection) return;
-    addHighlight({ text: selection.text, page: selection.page, color: chosenColor, note: '' });
+    addHighlight({
+      text: selection.text,
+      page: selection.page,
+      color: chosenColor,
+      note: '',
+      rects: selection.rects,
+    });
+    // Open the sidebar on the Highlights tab so the user can see the new entry
+    setSidebarOpen(true);
     setSidebarTab('highlights');
     window.getSelection()?.removeAllRanges();
     setSelection(null);
-  }, [selection, chosenColor, addHighlight, setSidebarTab]);
+  }, [selection, chosenColor, addHighlight, setSidebarTab, setSidebarOpen]);
 
   const dismissSelection = useCallback(() => {
     window.getSelection()?.removeAllRanges();
     setSelection(null);
   }, []);
 
-  const handlePageRenderSuccess = useCallback((pageNumber: number) => {
-    setRenderedPages((prev) => {
-      const next = new Set(prev);
-      next.add(pageNumber);
-      return next;
-    });
-  }, []);
-
-  // Scroll to page when currentPage changes
+  // Scroll to page when currentPage changes or when a force-scroll is requested
   useEffect(() => {
     const el = pageRefs.current.get(currentPage);
     if (el) {
       el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
-  }, [currentPage]);
+  // scrollKey intentionally forces a re-run even when currentPage hasn't changed
+  }, [currentPage, scrollKey]);
 
   // Track visible page via IntersectionObserver
   useEffect(() => {
@@ -250,7 +220,49 @@ export default function PDFViewer() {
     return () => observers.forEach((o) => o.disconnect());
   }, [numPages, setCurrentPage]);
 
+  // Keyboard shortcuts: ArrowLeft/Right and PageUp/Down for page navigation
+  // Only fires when focus is not on an interactive element to avoid conflicts.
+  useEffect(() => {
+    if (!pdfFile || numPages === 0) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName;
+      if (INTERACTIVE_TAGS.includes(tag)) return;
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'PageUp') {
+        e.preventDefault();
+        setCurrentPage(Math.max(1, currentPage - 1));
+      } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === 'PageDown') {
+        e.preventDefault();
+        setCurrentPage(Math.min(numPages, currentPage + 1));
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [pdfFile, numPages, currentPage, setCurrentPage]);
+
+  const commitPageInput = useCallback(() => {
+    const parsed = parseInt(pageInputValue, 10);
+    if (!isNaN(parsed) && parsed >= 1 && parsed <= numPages) {
+      setCurrentPage(parsed);
+    }
+    setIsEditingPage(false);
+  }, [pageInputValue, numPages, setCurrentPage]);
+
+  const handleStartPageEdit = useCallback(() => {
+    setPageInputValue(String(currentPage));
+    setIsEditingPage(true);
+  }, [currentPage]);
+
   if (!pdfFile) {
+    if (pdfLoading) {
+      return (
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center p-8">
+            <div className="text-4xl mb-4 animate-spin">⏳</div>
+            <p className="text-[var(--color-text-muted)] text-sm">Loading IRPG…</p>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="flex-1 flex items-center justify-center">
         <div className="text-center p-8 max-w-md">
@@ -283,18 +295,39 @@ export default function PDFViewer() {
             className="btn-icon"
             onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
             disabled={currentPage <= 1}
-            title="Previous page"
+            title="Previous page (←)"
           >
             <ChevronLeft size={18} />
           </button>
-          <span className="text-sm font-mono text-[var(--color-text)] min-w-[80px] text-center">
-            {currentPage} / {numPages}
-          </span>
+          {isEditingPage ? (
+            <input
+              type="number"
+              className="input-base text-sm font-mono text-center min-w-[60px] max-w-[60px] px-1 py-0.5"
+              value={pageInputValue}
+              min={1}
+              max={numPages}
+              onChange={(e) => setPageInputValue(e.target.value)}
+              onBlur={commitPageInput}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') commitPageInput();
+                if (e.key === 'Escape') setIsEditingPage(false);
+              }}
+              autoFocus
+            />
+          ) : (
+            <button
+              className="text-sm font-mono text-[var(--color-text)] min-w-[80px] text-center hover:bg-[var(--color-border)]/40 rounded px-1 py-0.5 transition-colors"
+              onClick={handleStartPageEdit}
+              title="Click to jump to a page"
+            >
+              {currentPage} / {numPages}
+            </button>
+          )}
           <button
             className="btn-icon"
             onClick={() => setCurrentPage(Math.min(numPages, currentPage + 1))}
             disabled={currentPage >= numPages}
-            title="Next page"
+            title="Next page (→)"
           >
             <ChevronRight size={18} />
           </button>
@@ -386,15 +419,45 @@ export default function PDFViewer() {
                 else pageRefs.current.delete(pg);
               }}
               data-page-number={pg}
-              className="shadow-lg"
+              className="shadow-lg relative"
             >
               <Page
                 pageNumber={pg}
                 scale={scale}
                 renderTextLayer
                 renderAnnotationLayer
-                onRenderSuccess={() => handlePageRenderSuccess(pg)}
               />
+              {/* Highlight overlay layer.
+                  z-index: 1 places this container above the PDF canvas (z-index auto)
+                  but below the text-selection layer (z-index 2) and annotation layer
+                  (z-index 3).  react-pdf__Page has only position:relative (no z-index)
+                  so it does not create a new stacking context, meaning all z-indexes
+                  here compare in the same ancestor context.
+                  Result: highlight color appears as a true background behind the
+                  rendered PDF text — text stays fully readable and selectable. */}
+              <div
+                className="absolute inset-0 pointer-events-none"
+                style={{ zIndex: 1 }}
+              >
+                {highlights
+                  .filter((h) => h.page === pg && h.rects && h.rects.length > 0)
+                  .flatMap((h) =>
+                    h.rects!.map((r, i) => (
+                      <div
+                        key={`${h.id}-${i}`}
+                        className="absolute dark:mix-blend-screen mix-blend-multiply"
+                        style={{
+                          left: `${r.left * 100}%`,
+                          top: `${r.top * 100}%`,
+                          width: `${r.width * 100}%`,
+                          height: `${r.height * 100}%`,
+                          backgroundColor: h.color,
+                          opacity: 0.6,
+                        }}
+                      />
+                    )),
+                  )}
+              </div>
             </div>
           ))}
         </Document>
