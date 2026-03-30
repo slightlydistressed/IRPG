@@ -6,6 +6,17 @@ import React, {
   useEffect,
 } from 'react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
+import { useDocStorage } from '../hooks/useDocStorage';
+import {
+  BUILTIN_DOC_ID,
+  getDocumentId,
+  migrateGlobalData,
+} from '../utils/docStorage';
+import {
+  savePdfToIdb,
+  loadPdfFromIdb,
+  deletePdfFromIdb,
+} from '../utils/pdfStorage';
 import type {
   Highlight,
   Bookmark,
@@ -14,12 +25,28 @@ import type {
   SidebarTab,
 } from '../types';
 
+// Migrate legacy single-bucket keys into per-document keys on first load.
+// Runs once synchronously when the module is imported (before any render).
+migrateGlobalData();
+
+/** Fetch the bundled irpg.pdf and return it as a File object. */
+function fetchBundledPdf(): Promise<File> {
+  return fetch(import.meta.env.BASE_URL + 'irpg.pdf')
+    .then((res) => {
+      if (!res.ok) throw new Error('Failed to fetch irpg.pdf');
+      return res.blob();
+    })
+    .then((blob) => new File([blob], 'irpg.pdf', { type: 'application/pdf' }));
+}
+
 interface AppState {
   // PDF
   pdfFile: File | null;
   setPdfFile: (file: File | null) => void;
   pdfLoading: boolean;
   pdfName: string;
+  /** Stable identifier for the currently open document. */
+  documentId: string;
   currentPage: number;
   setCurrentPage: (page: number) => void;
   numPages: number;
@@ -37,11 +64,14 @@ interface AppState {
 
   // Highlights
   highlights: Highlight[];
-  addHighlight: (h: Omit<Highlight, 'id' | 'createdAt'>) => void;
+  addHighlight: (h: Omit<Highlight, 'id' | 'createdAt'>) => string;
   removeHighlight: (id: string) => void;
   updateHighlightNote: (id: string, note: string) => void;
   updateHighlightColor: (id: string, color: string) => void;
   clearAllHighlights: () => void;
+  /** Ephemeral ID of the highlight that should appear focused in the PDF overlay. */
+  selectedHighlightId: string | null;
+  setSelectedHighlightId: (id: string | null) => void;
 
   // Bookmarks
   bookmarks: Bookmark[];
@@ -56,6 +86,11 @@ interface AppState {
   removeQAPair: (id: string) => void;
   setQAPairs: (pairs: QAPair[]) => void;
 
+  /** True when a user-uploaded PDF is active (not the bundled irpg.pdf). */
+  isUploadedPdf: boolean;
+  /** Clears the stored uploaded PDF from IndexedDB and reverts to the bundled IRPG PDF. */
+  clearUploadedPdf: () => void;
+
   // Navigation
   /** Scrolls to the given page even if currentPage is already set to that value. */
   scrollToPage: (page: number) => void;
@@ -68,17 +103,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [pdfFile, setPdfFileState] = useState<File | null>(null);
   const [pdfLoading, setPdfLoading] = useState(true);
   const [pdfName, setPdfName] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
   const [numPages, setNumPages] = useState(0);
-  const [scale, setScale] = useState(1.2);
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>('toc');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [scrollKey, setScrollKey] = useState(0);
+  const [selectedHighlightId, setSelectedHighlightId] = useState<string | null>(null);
+
+  // documentId scopes all per-document storage.  Starts as the bundled PDF's
+  // stable ID; changes when the user uploads a different file.
+  const [documentId, setDocumentId] = useState<string>(BUILTIN_DOC_ID);
 
   const [theme, setTheme] = useLocalStorage<Theme>('irpg-theme', 'light');
-  const [highlights, setHighlights] = useLocalStorage<Highlight[]>('irpg-highlights', []);
-  const [bookmarks, setBookmarks] = useLocalStorage<Bookmark[]>('irpg-bookmarks', []);
-  const [qaPairs, setQAPairs] = useLocalStorage<QAPair[]>('irpg-qa', []);
+
+  // Per-document persisted state ──────────────────────────────────────────
+  const [highlights, setHighlights] = useDocStorage<Highlight[]>(documentId, 'highlights', []);
+  const [bookmarks, setBookmarks] = useDocStorage<Bookmark[]>(documentId, 'bookmarks', []);
+  const [qaPairs, setQAPairs] = useDocStorage<QAPair[]>(documentId, 'qa', []);
+  const [currentPage, setCurrentPage] = useDocStorage<number>(documentId, 'page', 1);
+  const [scale, setScale] = useDocStorage<number>(documentId, 'scale', 1.2);
 
   // Apply theme to document
   useEffect(() => {
@@ -96,34 +138,75 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const setPdfFile = useCallback((file: File | null) => {
     setPdfFileState(file);
     setPdfName(file ? file.name : '');
-    setCurrentPage(1);
+    // Assign a new documentId so per-document hooks load the correct storage
+    // slot for this file.  The bundled PDF keeps BUILTIN_DOC_ID (see
+    // auto-load effect below).
+    setDocumentId(file ? getDocumentId(file) : BUILTIN_DOC_ID);
     setNumPages(0);
+    // Persist the uploaded file in IndexedDB so it can be restored on reload.
+    if (file) {
+      savePdfToIdb(file).catch((err) =>
+        console.error('Could not save PDF to IndexedDB:', err),
+      );
+    }
   }, []);
 
-  // Auto-load the bundled IRPG PDF on first mount
-  useEffect(() => {
-    fetch('/irpg.pdf')
-      .then((res) => {
-        if (!res.ok) throw new Error('Failed to fetch irpg.pdf');
-        return res.blob();
+  /** Clears the stored uploaded PDF and reverts to the bundled IRPG PDF. */
+  const clearUploadedPdf = useCallback(() => {
+    deletePdfFromIdb().catch((err) =>
+      console.error('Could not delete PDF from IndexedDB:', err),
+    );
+    setPdfLoading(true);
+    fetchBundledPdf()
+      .then((file) => {
+        setPdfFileState(file);
+        setPdfName('irpg.pdf');
+        setDocumentId(BUILTIN_DOC_ID);
+        setNumPages(0);
       })
-      .then((blob) => {
-        const file = new File([blob], 'irpg.pdf', { type: 'application/pdf' });
-        setPdfFile(file);
-      })
-      .catch((err) => console.error('Could not auto-load irpg.pdf:', err))
+      .catch((err) => console.error('Could not reload irpg.pdf:', err))
       .finally(() => setPdfLoading(false));
-  }, [setPdfFile]);
+  }, []);
+
+  // On first mount: try to restore a previously saved upload from IndexedDB;
+  // fall back to fetching the bundled irpg.pdf if nothing is stored.
+  useEffect(() => {
+    const loadBundled = () =>
+      fetchBundledPdf()
+        .then((file) => {
+          setPdfFileState(file);
+          setPdfName('irpg.pdf');
+          // documentId stays BUILTIN_DOC_ID (its initial value)
+        })
+        .catch((err) => console.error('Could not auto-load irpg.pdf:', err))
+        .finally(() => setPdfLoading(false));
+
+    loadPdfFromIdb()
+      .then((savedFile) => {
+        if (savedFile) {
+          // Restore the previously uploaded PDF with its correct documentId.
+          setPdfFileState(savedFile);
+          setPdfName(savedFile.name);
+          setDocumentId(getDocumentId(savedFile));
+          setNumPages(0);
+          setPdfLoading(false);
+        } else {
+          loadBundled();
+        }
+      })
+      .catch(() => loadBundled()); // IDB unavailable – fall back to bundled PDF
+  }, []); // intentionally empty – runs once on mount
 
   // Highlights
   const addHighlight = useCallback(
-    (h: Omit<Highlight, 'id' | 'createdAt'>) => {
+    (h: Omit<Highlight, 'id' | 'createdAt'>): string => {
       const newHighlight: Highlight = {
         ...h,
         id: `h-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         createdAt: new Date().toISOString(),
       };
       setHighlights((prev) => [newHighlight, ...prev]);
+      return newHighlight.id;
     },
     [setHighlights],
   );
@@ -230,6 +313,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setPdfFile,
         pdfLoading,
         pdfName,
+        documentId,
         currentPage,
         setCurrentPage,
         numPages,
@@ -248,6 +332,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         updateHighlightNote,
         updateHighlightColor,
         clearAllHighlights,
+        selectedHighlightId,
+        setSelectedHighlightId,
         bookmarks,
         addBookmark,
         removeBookmark,
@@ -259,6 +345,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setQAPairs,
         scrollToPage,
         scrollKey,
+        isUploadedPdf: documentId !== BUILTIN_DOC_ID,
+        clearUploadedPdf,
       }}
     >
       {children}

@@ -13,47 +13,56 @@ const TABS: { id: SidebarTab; label: string; Icon: React.ElementType }[] = [
 ];
 
 export default function Sidebar() {
-  const { sidebarTab, setSidebarTab, sidebarOpen, highlights } = useApp();
-
-  if (!sidebarOpen) return null;
+  const { sidebarTab, setSidebarTab, sidebarOpen, setSidebarOpen, highlights } = useApp();
 
   return (
-    <aside className="sidebar flex flex-col shrink-0 overflow-hidden">
-      {/* Tab bar */}
-      <div className="flex border-b border-[var(--color-border)]">
-        {TABS.map(({ id, label, Icon }) => (
-          <button
-            key={id}
-            onClick={() => setSidebarTab(id)}
-            className={`tab-btn flex-1 flex flex-col items-center gap-0.5 py-2 text-xs transition-colors ${
-              sidebarTab === id ? 'tab-btn-active' : ''
-            }`}
-            title={label}
-            aria-selected={sidebarTab === id}
-            role="tab"
-          >
-            <div className="relative">
-              <Icon size={16} />
-              {id === 'highlights' && highlights.length > 0 && (
-                <span
-                  className="absolute -top-1.5 -right-2 inline-flex items-center justify-center min-w-[14px] h-[14px] px-0.5 rounded-full bg-[var(--color-accent)] text-white text-[9px] font-bold leading-none"
-                  aria-label={`${highlights.length} highlight${highlights.length !== 1 ? 's' : ''}`}
-                >
-                  {highlights.length > 99 ? '99+' : highlights.length}
-                </span>
-              )}
-            </div>
-            <span>{label}</span>
-          </button>
-        ))}
-      </div>
+    <>
+      {/* Tap-outside backdrop – rendered on mobile only via CSS */}
+      {sidebarOpen && (
+        <div
+          className="sidebar-backdrop"
+          onClick={() => setSidebarOpen(false)}
+          aria-hidden="true"
+        />
+      )}
 
-      {/* Tab content */}
-      <div className="flex-1 overflow-y-auto">
-        {sidebarTab === 'toc' && <TableOfContents />}
-        {sidebarTab === 'highlights' && <HighlightPanel />}
-        {sidebarTab === 'qa' && <QASection />}
-      </div>
-    </aside>
+      <aside className={`sidebar flex flex-col shrink-0 overflow-hidden${sidebarOpen ? ' sidebar-open' : ''}`}>
+        {/* Tab bar */}
+        <div className="flex border-b border-[var(--color-border)]">
+          {TABS.map(({ id, label, Icon }) => (
+            <button
+              key={id}
+              onClick={() => setSidebarTab(id)}
+              className={`tab-btn flex-1 flex flex-col items-center gap-0.5 py-2 text-xs transition-colors ${
+                sidebarTab === id ? 'tab-btn-active' : ''
+              }`}
+              title={label}
+              aria-selected={sidebarTab === id}
+              role="tab"
+            >
+              <div className="relative">
+                <Icon size={16} />
+                {id === 'highlights' && highlights.length > 0 && (
+                  <span
+                    className="absolute -top-1.5 -right-2 inline-flex items-center justify-center min-w-[14px] h-[14px] px-0.5 rounded-full bg-[var(--color-accent)] text-white text-[9px] font-bold leading-none"
+                    aria-label={`${highlights.length} highlight${highlights.length !== 1 ? 's' : ''}`}
+                  >
+                    {highlights.length > 99 ? '99+' : highlights.length}
+                  </span>
+                )}
+              </div>
+              <span>{label}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Tab content */}
+        <div className="flex-1 overflow-y-auto">
+          {sidebarTab === 'toc' && <TableOfContents />}
+          {sidebarTab === 'highlights' && <HighlightPanel />}
+          {sidebarTab === 'qa' && <QASection />}
+        </div>
+      </aside>
+    </>
   );
 }

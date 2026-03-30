@@ -14,11 +14,11 @@ import {
   ChevronLeft,
   ChevronRight,
   Highlighter,
-  X,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { HIGHLIGHT_COLORS } from '../types';
-import type { HighlightRect } from '../types';
+import type { HighlightRect, SelectionState } from '../types';
+import HighlightToolbar from './HighlightToolbar';
 
 // Configure PDF.js worker
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
@@ -26,16 +26,11 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   import.meta.url,
 ).toString();
 
-interface SelectionState {
-  text: string;
-  page: number;
-  x: number;
-  y: number;
-  rects: HighlightRect[];
-}
-
 /** Tags that should not trigger keyboard shortcuts (focus is on interactive element) */
 const INTERACTIVE_TAGS = ['INPUT', 'TEXTAREA', 'SELECT', 'A', 'BUTTON'];
+
+/** How long (ms) a newly created or clicked highlight stays visually focused. */
+const HIGHLIGHT_FOCUS_DURATION_MS = 2000;
 
 /** Walk the DOM to find the page number attribute */
 function getPageFromNode(node: Node | null): number {
@@ -66,6 +61,8 @@ export default function PDFViewer() {
     qaPairs,
     pdfName,
     scrollKey,
+    selectedHighlightId,
+    setSelectedHighlightId,
   } = useApp();
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -74,6 +71,9 @@ export default function PDFViewer() {
   const [chosenColor, setChosenColor] = useState<string>(HIGHLIGHT_COLORS[0].value);
   const [pageInputValue, setPageInputValue] = useState('');
   const [isEditingPage, setIsEditingPage] = useState(false);
+
+  // Debounce timer for the selectionchange fallback (mobile touch handles).
+  const selectionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const onDocumentLoadSuccess = useCallback(
     async ({ numPages: n }: { numPages: number }) => {
@@ -125,26 +125,30 @@ export default function PDFViewer() {
     [setNumPages, pdfFile, qaPairs.length, setQAPairs],
   );
 
-  // Handle text selection – capture bounding rects relative to the page element
-  // so highlight overlays render correctly at any zoom level.
-  const handleMouseUp = useCallback(() => {
+  /**
+   * Read the current browser selection and convert it into a `SelectionState`
+   * if the selection is non-empty and falls within the PDF container.
+   * Returns `null` if no usable selection is found.
+   *
+   * Called from both the `onPointerUp` handler (immediate, desktop/stylus)
+   * and the debounced `selectionchange` listener (mobile touch handles).
+   */
+  const captureCurrentSelection = useCallback((): SelectionState | null => {
     const sel = window.getSelection();
-    if (!sel || sel.isCollapsed || !sel.toString().trim()) {
-      setSelection(null);
-      return;
-    }
+    if (!sel || sel.isCollapsed || !sel.toString().trim()) return null;
 
     const text = sel.toString().trim();
     const page = getPageFromNode(sel.anchorNode);
-    if (!page) return;
+    if (!page) return null;
 
     const range = sel.getRangeAt(0);
     const selRect = range.getBoundingClientRect();
-    const containerRect = containerRef.current?.getBoundingClientRect();
-    if (!containerRect) return;
+    const containerEl = containerRef.current;
+    const containerRect = containerEl?.getBoundingClientRect();
+    if (!containerRect) return null;
 
     // Build normalised rects (fraction of page dimensions) for the overlay divs.
-    const pageEl = containerRef.current?.querySelector<HTMLElement>(
+    const pageEl = containerEl?.querySelector<HTMLElement>(
       `[data-page-number="${page}"]`,
     );
     const pageRect = pageEl?.getBoundingClientRect();
@@ -160,37 +164,123 @@ export default function PDFViewer() {
         }));
     }
 
-    // Account for scroll offset so the floating toolbar appears above the selection
-    const scrollTop = containerRef.current?.scrollTop ?? 0;
-    setSelection({
+    const scrollTop = containerEl?.scrollTop ?? 0;
+    return {
       text,
       page,
       x: selRect.left - containerRect.left + selRect.width / 2,
-      y: selRect.top - containerRect.top + scrollTop - 8,
+      yTop: selRect.top - containerRect.top + scrollTop,
+      yBottom: selRect.bottom - containerRect.top + scrollTop,
       rects,
-    });
-  }, []);
+    };
+  }, []); // containerRef is a stable ref – no deps needed
 
-  const handleHighlight = useCallback(() => {
+  /**
+   * Pointer-up handler on the PDF container.
+   *
+   * `pointerup` fires for mouse, touch, and pen input (unlike `mouseup` which
+   * only fires for mouse).  This covers the common desktop/stylus case and
+   * also handles single-tap dismissal (pointer released with empty selection).
+   */
+  const handlePointerUp = useCallback(() => {
+    const captured = captureCurrentSelection();
+    if (captured) {
+      setSelection(captured);
+    } else {
+      // Pointer released with no active selection – dismiss any open toolbar.
+      setSelection(null);
+    }
+  }, [captureCurrentSelection]);
+
+  /**
+   * Debounced `selectionchange` listener.
+   *
+   * On mobile/tablet, the user drags OS-provided text-selection handles to
+   * extend their selection.  During that gesture the browser consumes the
+   * touch stream, so no `pointerup` event reaches our handler.  Listening to
+   * `selectionchange` on the document – debounced so we only act once the
+   * user pauses – fills that gap.
+   */
+  useEffect(() => {
+    const onSelectionChange = () => {
+      if (selectionTimerRef.current !== null) clearTimeout(selectionTimerRef.current);
+      selectionTimerRef.current = setTimeout(() => {
+        selectionTimerRef.current = null;
+        const sel = window.getSelection();
+        if (!sel || sel.isCollapsed || !sel.toString().trim()) return;
+
+        // Only act when the selection anchor is inside our container.
+        const container = containerRef.current;
+        if (!container) return;
+        const anchor = sel.anchorNode;
+        const anchorEl = anchor instanceof Element ? anchor : anchor?.parentElement;
+        if (!anchorEl || !container.contains(anchorEl)) return;
+
+        const captured = captureCurrentSelection();
+        if (captured) setSelection(captured);
+      }, 350);
+    };
+
+    document.addEventListener('selectionchange', onSelectionChange);
+    return () => {
+      document.removeEventListener('selectionchange', onSelectionChange);
+      if (selectionTimerRef.current !== null) clearTimeout(selectionTimerRef.current);
+    };
+  }, [captureCurrentSelection]);
+
+  const handleHighlight = useCallback((note: string) => {
     if (!selection) return;
-    addHighlight({
+    const newId = addHighlight({
       text: selection.text,
       page: selection.page,
       color: chosenColor,
-      note: '',
+      note,
       rects: selection.rects,
     });
     // Open the sidebar on the Highlights tab so the user can see the new entry
     setSidebarOpen(true);
     setSidebarTab('highlights');
+    // Visually focus the newly created highlight in the overlay
+    setSelectedHighlightId(newId);
     window.getSelection()?.removeAllRanges();
     setSelection(null);
-  }, [selection, chosenColor, addHighlight, setSidebarTab, setSidebarOpen]);
+  }, [selection, chosenColor, addHighlight, setSidebarTab, setSidebarOpen, setSelectedHighlightId]);
 
   const dismissSelection = useCallback(() => {
     window.getSelection()?.removeAllRanges();
     setSelection(null);
   }, []);
+
+  /**
+   * When `selectedHighlightId` is set (either by creating a new highlight or
+   * by clicking one in the sidebar), scroll the PDF container so the first
+   * rect of that highlight is visible, then auto-clear the focus after 2 s.
+   */
+  useEffect(() => {
+    if (!selectedHighlightId) return;
+    const h = highlights.find((hi) => hi.id === selectedHighlightId);
+    if (!h) return;
+    const container = containerRef.current;
+    if (!container) return;
+    const pageEl = pageRefs.current.get(h.page);
+    if (!pageEl) return;
+
+    if (h.rects && h.rects.length > 0) {
+      const containerRect = container.getBoundingClientRect();
+      const pageRect = pageEl.getBoundingClientRect();
+      const pageScrollTop = pageRect.top - containerRect.top + container.scrollTop;
+      const highlightScrollTop = pageScrollTop + h.rects[0].top * pageEl.offsetHeight;
+      container.scrollTo({
+        top: Math.max(0, highlightScrollTop - 80),
+        behavior: 'smooth',
+      });
+    } else {
+      pageEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    const clearTimer = setTimeout(() => setSelectedHighlightId(null), HIGHLIGHT_FOCUS_DURATION_MS);
+    return () => clearTimeout(clearTimer);
+  }, [selectedHighlightId, highlights, setSelectedHighlightId]);
 
   // Scroll to page when currentPage changes or when a force-scroll is requested
   useEffect(() => {
@@ -289,8 +379,8 @@ export default function PDFViewer() {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Toolbar */}
-      <div className="viewer-toolbar flex items-center gap-2 px-3 py-1.5 border-b border-[var(--color-border)] shrink-0 flex-wrap">
-        <div className="flex items-center gap-1">
+      <div className="viewer-toolbar flex items-center gap-2 px-3 py-1.5 border-b border-[var(--color-border)] shrink-0 overflow-x-auto">
+        <div className="flex items-center gap-1 shrink-0">
           <button
             className="btn-icon"
             onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
@@ -335,7 +425,7 @@ export default function PDFViewer() {
 
         <div className="w-px h-5 bg-[var(--color-border)]" />
 
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 shrink-0">
           <button
             className="btn-icon"
             onClick={() => setScale(Math.max(0.5, scale - 0.1))}
@@ -364,9 +454,10 @@ export default function PDFViewer() {
           </button>
         </div>
 
-        <div className="w-px h-5 bg-[var(--color-border)]" />
+        {/* Colour pre-selector – hidden on mobile (the floating HighlightToolbar has its own) */}
+        <div className="hidden sm:block w-px h-5 bg-[var(--color-border)]" />
 
-        <div className="flex items-center gap-1">
+        <div className="hidden sm:flex items-center gap-1 shrink-0">
           <Highlighter size={14} className="text-[var(--color-text-muted)]" />
           {HIGHLIGHT_COLORS.map((c) => (
             <button
@@ -394,7 +485,7 @@ export default function PDFViewer() {
       <div
         ref={containerRef}
         className="flex-1 overflow-y-auto pdf-container relative select-text"
-        onMouseUp={handleMouseUp}
+        onPointerUp={handlePointerUp}
       >
         <Document
           file={pdfFile}
@@ -441,64 +532,45 @@ export default function PDFViewer() {
               >
                 {highlights
                   .filter((h) => h.page === pg && h.rects && h.rects.length > 0)
-                  .flatMap((h) =>
-                    h.rects!.map((r, i) => (
+                  .flatMap((h) => {
+                    const isSelected = h.id === selectedHighlightId;
+                    return h.rects!.map((r, i) => (
                       <div
                         key={`${h.id}-${i}`}
-                        className="absolute dark:mix-blend-screen mix-blend-multiply"
+                        className={`absolute transition-opacity ${
+                          isSelected
+                            ? ''
+                            : 'dark:mix-blend-screen mix-blend-multiply'
+                        }`}
                         style={{
                           left: `${r.left * 100}%`,
                           top: `${r.top * 100}%`,
                           width: `${r.width * 100}%`,
                           height: `${r.height * 100}%`,
                           backgroundColor: h.color,
-                          opacity: 0.6,
+                          opacity: isSelected ? 0.85 : 0.6,
+                          boxShadow: isSelected
+                            ? '0 0 0 2px var(--color-accent)'
+                            : undefined,
                         }}
                       />
-                    )),
-                  )}
+                    ));
+                  })}
               </div>
             </div>
           ))}
         </Document>
 
-        {/* Floating highlight toolbar */}
+        {/* Floating highlight toolbar – viewport-clamped via HighlightToolbar */}
         {selection && (
-          <div
-            className="absolute z-20 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg shadow-xl p-2 flex items-center gap-2"
-            style={{
-              left: `${Math.max(0, selection.x - 80)}px`,
-              top: `${Math.max(0, selection.y - 60)}px`,
-            }}
-          >
-            <Highlighter size={14} className="text-[var(--color-text-muted)]" />
-            {HIGHLIGHT_COLORS.map((c) => (
-              <button
-                key={c.value}
-                onClick={() => setChosenColor(c.value)}
-                className={`w-5 h-5 rounded-full border-2 transition-transform ${
-                  chosenColor === c.value
-                    ? 'border-[var(--color-accent)] scale-125'
-                    : 'border-[var(--color-border)] hover:scale-110'
-                }`}
-                style={{ backgroundColor: c.value }}
-                title={c.label}
-              />
-            ))}
-            <button
-              onClick={handleHighlight}
-              className="btn-primary btn-sm ml-1 flex items-center gap-1"
-            >
-              <Highlighter size={12} />
-              Highlight
-            </button>
-            <button
-              onClick={dismissSelection}
-              className="btn-icon text-[var(--color-text-muted)]"
-            >
-              <X size={14} />
-            </button>
-          </div>
+          <HighlightToolbar
+            selection={selection}
+            chosenColor={chosenColor}
+            onColorChange={setChosenColor}
+            onHighlight={handleHighlight}
+            onDismiss={dismissSelection}
+            containerRef={containerRef}
+          />
         )}
       </div>
     </div>

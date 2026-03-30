@@ -45,6 +45,23 @@ export interface TOCItem {
   items?: TOCItem[];
 }
 
+/**
+ * Transient UI state representing an active text selection that the user may
+ * choose to highlight.  All positions are in pixels, scroll-adjusted, relative
+ * to the top-left of the scrollable PDF container element.
+ */
+export interface SelectionState {
+  text: string;
+  page: number;
+  /** Horizontal centre of the selection bounding box. */
+  x: number;
+  /** Top edge of the selection bounding box (scroll-adjusted). */
+  yTop: number;
+  /** Bottom edge of the selection bounding box (scroll-adjusted). */
+  yBottom: number;
+  rects: HighlightRect[];
+}
+
 export const HIGHLIGHT_COLORS = [
   { label: 'Yellow', value: '#fde68a' },
   { label: 'Green', value: '#86efac' },

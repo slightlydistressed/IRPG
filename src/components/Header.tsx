@@ -7,6 +7,7 @@ import {
   PanelLeftOpen,
   PanelLeftClose,
   BookmarkCheck,
+  Trash2,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
@@ -24,6 +25,8 @@ export default function Header() {
     addBookmark,
     removeBookmark,
     bookmarks,
+    isUploadedPdf,
+    clearUploadedPdf,
   } = useApp();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -104,6 +107,17 @@ export default function Header() {
           <Upload size={16} />
           <span className="hidden sm:inline">Open PDF</span>
         </button>
+
+        {isUploadedPdf && (
+          <button
+            onClick={clearUploadedPdf}
+            className="btn-icon"
+            title="Close uploaded PDF and revert to IRPG guide"
+            aria-label="Close uploaded PDF"
+          >
+            <Trash2 size={20} />
+          </button>
+        )}
 
         <input
           ref={fileInputRef}
