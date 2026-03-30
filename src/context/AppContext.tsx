@@ -12,6 +12,11 @@ import {
   getDocumentId,
   migrateGlobalData,
 } from '../utils/docStorage';
+import {
+  savePdfToIdb,
+  loadPdfFromIdb,
+  deletePdfFromIdb,
+} from '../utils/pdfStorage';
 import type {
   Highlight,
   Bookmark,
@@ -23,6 +28,16 @@ import type {
 // Migrate legacy single-bucket keys into per-document keys on first load.
 // Runs once synchronously when the module is imported (before any render).
 migrateGlobalData();
+
+/** Fetch the bundled irpg.pdf and return it as a File object. */
+function fetchBundledPdf(): Promise<File> {
+  return fetch(import.meta.env.BASE_URL + 'irpg.pdf')
+    .then((res) => {
+      if (!res.ok) throw new Error('Failed to fetch irpg.pdf');
+      return res.blob();
+    })
+    .then((blob) => new File([blob], 'irpg.pdf', { type: 'application/pdf' }));
+}
 
 interface AppState {
   // PDF
@@ -67,6 +82,11 @@ interface AppState {
   addQAPair: (question: string, page?: number) => void;
   removeQAPair: (id: string) => void;
   setQAPairs: (pairs: QAPair[]) => void;
+
+  /** True when a user-uploaded PDF is active (not the bundled irpg.pdf). */
+  isUploadedPdf: boolean;
+  /** Clears the stored uploaded PDF from IndexedDB and reverts to the bundled IRPG PDF. */
+  clearUploadedPdf: () => void;
 
   // Navigation
   /** Scrolls to the given page even if currentPage is already set to that value. */
@@ -119,24 +139,58 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     // auto-load effect below).
     setDocumentId(file ? getDocumentId(file) : BUILTIN_DOC_ID);
     setNumPages(0);
+    // Persist the uploaded file in IndexedDB so it can be restored on reload.
+    if (file) {
+      savePdfToIdb(file).catch((err) =>
+        console.error('Could not save PDF to IndexedDB:', err),
+      );
+    }
   }, []);
 
-  // Auto-load the bundled IRPG PDF on first mount.
-  // We set file state directly (not via setPdfFile) so documentId stays as
-  // BUILTIN_DOC_ID – its initial value – and we load the correct saved state.
-  useEffect(() => {
-    fetch(import.meta.env.BASE_URL + 'irpg.pdf')
-      .then((res) => {
-        if (!res.ok) throw new Error('Failed to fetch irpg.pdf');
-        return res.blob();
-      })
-      .then((blob) => {
-        const file = new File([blob], 'irpg.pdf', { type: 'application/pdf' });
+  /** Clears the stored uploaded PDF and reverts to the bundled IRPG PDF. */
+  const clearUploadedPdf = useCallback(() => {
+    deletePdfFromIdb().catch((err) =>
+      console.error('Could not delete PDF from IndexedDB:', err),
+    );
+    setPdfLoading(true);
+    fetchBundledPdf()
+      .then((file) => {
         setPdfFileState(file);
         setPdfName('irpg.pdf');
+        setDocumentId(BUILTIN_DOC_ID);
+        setNumPages(0);
       })
-      .catch((err) => console.error('Could not auto-load irpg.pdf:', err))
+      .catch((err) => console.error('Could not reload irpg.pdf:', err))
       .finally(() => setPdfLoading(false));
+  }, []);
+
+  // On first mount: try to restore a previously saved upload from IndexedDB;
+  // fall back to fetching the bundled irpg.pdf if nothing is stored.
+  useEffect(() => {
+    const loadBundled = () =>
+      fetchBundledPdf()
+        .then((file) => {
+          setPdfFileState(file);
+          setPdfName('irpg.pdf');
+          // documentId stays BUILTIN_DOC_ID (its initial value)
+        })
+        .catch((err) => console.error('Could not auto-load irpg.pdf:', err))
+        .finally(() => setPdfLoading(false));
+
+    loadPdfFromIdb()
+      .then((savedFile) => {
+        if (savedFile) {
+          // Restore the previously uploaded PDF with its correct documentId.
+          setPdfFileState(savedFile);
+          setPdfName(savedFile.name);
+          setDocumentId(getDocumentId(savedFile));
+          setNumPages(0);
+          setPdfLoading(false);
+        } else {
+          loadBundled();
+        }
+      })
+      .catch(() => loadBundled()); // IDB unavailable – fall back to bundled PDF
   }, []); // intentionally empty – runs once on mount
 
   // Highlights
@@ -284,6 +338,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setQAPairs,
         scrollToPage,
         scrollKey,
+        isUploadedPdf: documentId !== BUILTIN_DOC_ID,
+        clearUploadedPdf,
       }}
     >
       {children}
