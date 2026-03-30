@@ -64,11 +64,14 @@ interface AppState {
 
   // Highlights
   highlights: Highlight[];
-  addHighlight: (h: Omit<Highlight, 'id' | 'createdAt'>) => void;
+  addHighlight: (h: Omit<Highlight, 'id' | 'createdAt'>) => string;
   removeHighlight: (id: string) => void;
   updateHighlightNote: (id: string, note: string) => void;
   updateHighlightColor: (id: string, color: string) => void;
   clearAllHighlights: () => void;
+  /** Ephemeral ID of the highlight that should appear focused in the PDF overlay. */
+  selectedHighlightId: string | null;
+  setSelectedHighlightId: (id: string | null) => void;
 
   // Bookmarks
   bookmarks: Bookmark[];
@@ -104,6 +107,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>('toc');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [scrollKey, setScrollKey] = useState(0);
+  const [selectedHighlightId, setSelectedHighlightId] = useState<string | null>(null);
 
   // documentId scopes all per-document storage.  Starts as the bundled PDF's
   // stable ID; changes when the user uploads a different file.
@@ -195,13 +199,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // Highlights
   const addHighlight = useCallback(
-    (h: Omit<Highlight, 'id' | 'createdAt'>) => {
+    (h: Omit<Highlight, 'id' | 'createdAt'>): string => {
       const newHighlight: Highlight = {
         ...h,
         id: `h-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         createdAt: new Date().toISOString(),
       };
       setHighlights((prev) => [newHighlight, ...prev]);
+      return newHighlight.id;
     },
     [setHighlights],
   );
@@ -327,6 +332,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         updateHighlightNote,
         updateHighlightColor,
         clearAllHighlights,
+        selectedHighlightId,
+        setSelectedHighlightId,
         bookmarks,
         addBookmark,
         removeBookmark,

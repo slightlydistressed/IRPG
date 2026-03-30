@@ -22,7 +22,8 @@ export default function HighlightPanel() {
     updateHighlightNote,
     updateHighlightColor,
     clearAllHighlights,
-    scrollToPage,
+    selectedHighlightId,
+    setSelectedHighlightId,
     setSidebarOpen,
     setSidebarTab,
     addQAPair,
@@ -237,7 +238,11 @@ export default function HighlightPanel() {
           filtered.map((h) => (
             <div
               key={h.id}
-              className="rounded-lg border border-[var(--color-border)] overflow-hidden"
+              className={`rounded-lg border overflow-hidden transition-colors ${
+                selectedHighlightId === h.id
+                  ? 'border-[var(--color-accent)]'
+                  : 'border-[var(--color-border)]'
+              }`}
             >
               {/* Main row */}
               <div className="flex items-start gap-2 p-2">
@@ -251,7 +256,7 @@ export default function HighlightPanel() {
                 <div
                   className="flex-1 min-w-0 cursor-pointer"
                   onClick={() => {
-                    scrollToPage(h.page);
+                    setSelectedHighlightId(h.id);
                     if (window.innerWidth < 640) setSidebarOpen(false);
                   }}
                 >
@@ -272,6 +277,12 @@ export default function HighlightPanel() {
                       {colorLabel(h.color)}
                     </span>
                   </div>
+                  {h.note && (
+                    <p className="text-xs text-[var(--color-text-muted)] italic truncate mt-0.5 flex items-center gap-1">
+                      <FileText size={10} className="shrink-0" />
+                      {h.note}
+                    </p>
+                  )}
                 </div>
 
                 {/* Actions */}

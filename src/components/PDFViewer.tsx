@@ -29,6 +29,9 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL(
 /** Tags that should not trigger keyboard shortcuts (focus is on interactive element) */
 const INTERACTIVE_TAGS = ['INPUT', 'TEXTAREA', 'SELECT', 'A', 'BUTTON'];
 
+/** How long (ms) a newly created or clicked highlight stays visually focused. */
+const HIGHLIGHT_FOCUS_DURATION_MS = 2000;
+
 /** Walk the DOM to find the page number attribute */
 function getPageFromNode(node: Node | null): number {
   let el = node instanceof Element ? node : node?.parentElement;
@@ -58,6 +61,8 @@ export default function PDFViewer() {
     qaPairs,
     pdfName,
     scrollKey,
+    selectedHighlightId,
+    setSelectedHighlightId,
   } = useApp();
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -223,26 +228,59 @@ export default function PDFViewer() {
     };
   }, [captureCurrentSelection]);
 
-  const handleHighlight = useCallback(() => {
+  const handleHighlight = useCallback((note: string) => {
     if (!selection) return;
-    addHighlight({
+    const newId = addHighlight({
       text: selection.text,
       page: selection.page,
       color: chosenColor,
-      note: '',
+      note,
       rects: selection.rects,
     });
     // Open the sidebar on the Highlights tab so the user can see the new entry
     setSidebarOpen(true);
     setSidebarTab('highlights');
+    // Visually focus the newly created highlight in the overlay
+    setSelectedHighlightId(newId);
     window.getSelection()?.removeAllRanges();
     setSelection(null);
-  }, [selection, chosenColor, addHighlight, setSidebarTab, setSidebarOpen]);
+  }, [selection, chosenColor, addHighlight, setSidebarTab, setSidebarOpen, setSelectedHighlightId]);
 
   const dismissSelection = useCallback(() => {
     window.getSelection()?.removeAllRanges();
     setSelection(null);
   }, []);
+
+  /**
+   * When `selectedHighlightId` is set (either by creating a new highlight or
+   * by clicking one in the sidebar), scroll the PDF container so the first
+   * rect of that highlight is visible, then auto-clear the focus after 2 s.
+   */
+  useEffect(() => {
+    if (!selectedHighlightId) return;
+    const h = highlights.find((hi) => hi.id === selectedHighlightId);
+    if (!h) return;
+    const container = containerRef.current;
+    if (!container) return;
+    const pageEl = pageRefs.current.get(h.page);
+    if (!pageEl) return;
+
+    if (h.rects && h.rects.length > 0) {
+      const containerRect = container.getBoundingClientRect();
+      const pageRect = pageEl.getBoundingClientRect();
+      const pageScrollTop = pageRect.top - containerRect.top + container.scrollTop;
+      const highlightScrollTop = pageScrollTop + h.rects[0].top * pageEl.offsetHeight;
+      container.scrollTo({
+        top: Math.max(0, highlightScrollTop - 80),
+        behavior: 'smooth',
+      });
+    } else {
+      pageEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    const clearTimer = setTimeout(() => setSelectedHighlightId(null), HIGHLIGHT_FOCUS_DURATION_MS);
+    return () => clearTimeout(clearTimer);
+  }, [selectedHighlightId, highlights, setSelectedHighlightId]);
 
   // Scroll to page when currentPage changes or when a force-scroll is requested
   useEffect(() => {
@@ -493,22 +531,30 @@ export default function PDFViewer() {
               >
                 {highlights
                   .filter((h) => h.page === pg && h.rects && h.rects.length > 0)
-                  .flatMap((h) =>
-                    h.rects!.map((r, i) => (
+                  .flatMap((h) => {
+                    const isSelected = h.id === selectedHighlightId;
+                    return h.rects!.map((r, i) => (
                       <div
                         key={`${h.id}-${i}`}
-                        className="absolute dark:mix-blend-screen mix-blend-multiply"
+                        className={`absolute transition-opacity ${
+                          isSelected
+                            ? ''
+                            : 'dark:mix-blend-screen mix-blend-multiply'
+                        }`}
                         style={{
                           left: `${r.left * 100}%`,
                           top: `${r.top * 100}%`,
                           width: `${r.width * 100}%`,
                           height: `${r.height * 100}%`,
                           backgroundColor: h.color,
-                          opacity: 0.6,
+                          opacity: isSelected ? 0.85 : 0.6,
+                          boxShadow: isSelected
+                            ? '0 0 0 2px var(--color-accent)'
+                            : undefined,
                         }}
                       />
-                    )),
-                  )}
+                    ));
+                  })}
               </div>
             </div>
           ))}
