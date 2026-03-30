@@ -90,6 +90,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setNumPages(0);
   }, []);
 
+  // Auto-load the bundled IRPG PDF on first mount
+  useEffect(() => {
+    fetch('/irpg.pdf')
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed to fetch irpg.pdf');
+        return res.blob();
+      })
+      .then((blob) => {
+        const file = new File([blob], 'irpg.pdf', { type: 'application/pdf' });
+        setPdfFile(file);
+      })
+      .catch((err) => console.error('Could not auto-load irpg.pdf:', err));
+  }, [setPdfFile]);
+
   // Highlights
   const addHighlight = useCallback(
     (h: Omit<Highlight, 'id' | 'createdAt'>) => {
