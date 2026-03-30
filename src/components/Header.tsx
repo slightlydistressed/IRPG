@@ -7,7 +7,7 @@ import {
   PanelLeftOpen,
   PanelLeftClose,
   BookmarkCheck,
-  Trash2,
+  LayoutGrid,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
@@ -16,6 +16,8 @@ export default function Header() {
     theme,
     toggleTheme,
     setPdfFile,
+    openReader,
+    goHome,
     pdfName,
     currentPage,
     numPages,
@@ -25,8 +27,6 @@ export default function Header() {
     addBookmark,
     removeBookmark,
     bookmarks,
-    isUploadedPdf,
-    clearUploadedPdf,
   } = useApp();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -49,6 +49,8 @@ export default function Header() {
       }
 
       setPdfFile(file);
+      // Stay in reader when uploading from the reader header.
+      openReader();
     }
     // Reset so the same file can be re-selected
     e.target.value = '';
@@ -67,8 +69,17 @@ export default function Header() {
 
   return (
     <header className="header flex items-center justify-between px-4 py-2 shadow-md z-10 shrink-0">
-      {/* Left: Logo + sidebar toggle */}
+      {/* Left: Home button + sidebar toggle + doc name */}
       <div className="flex items-center gap-3 min-w-0">
+        <button
+          onClick={goHome}
+          className="btn-icon"
+          title="Back to library"
+          aria-label="Back to library"
+        >
+          <LayoutGrid size={20} />
+        </button>
+
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}
           className="btn-icon"
@@ -127,17 +138,6 @@ export default function Header() {
           <Upload size={16} />
           <span className="hidden sm:inline">Open PDF</span>
         </button>
-
-        {isUploadedPdf && (
-          <button
-            onClick={clearUploadedPdf}
-            className="btn-icon"
-            title="Close uploaded PDF and revert to IRPG guide"
-            aria-label="Close uploaded PDF"
-          >
-            <Trash2 size={20} />
-          </button>
-        )}
 
         <input
           ref={fileInputRef}
