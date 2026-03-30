@@ -4,6 +4,7 @@ import React, {
   useState,
   useCallback,
   useEffect,
+  useRef,
 } from 'react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { useDocStorage } from '../hooks/useDocStorage';
@@ -113,6 +114,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // stable ID; changes when the user uploads a different file.
   const [documentId, setDocumentId] = useState<string>(BUILTIN_DOC_ID);
 
+  // Tracks whether the user has explicitly selected a PDF so the async
+  // IndexedDB restore on mount does not overwrite a user-selected file if it
+  // resolves after the user has already uploaded one.
+  const userUploadedRef = useRef(false);
+
   const [theme, setTheme] = useLocalStorage<Theme>('irpg-theme', 'light');
 
   // Per-document persisted state ──────────────────────────────────────────
@@ -136,6 +142,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [setTheme]);
 
   const setPdfFile = useCallback((file: File | null) => {
+    // Mark that the user has explicitly selected a file so the async IndexedDB
+    // restore on mount does not overwrite it if it resolves later.
+    if (file) userUploadedRef.current = true;
     setPdfFileState(file);
     setPdfName(file ? file.name : '');
     // Assign a new documentId so per-document hooks load the correct storage
@@ -171,18 +180,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // On first mount: try to restore a previously saved upload from IndexedDB;
   // fall back to fetching the bundled irpg.pdf if nothing is stored.
   useEffect(() => {
+    // `cancelled` is set to true when the effect is cleaned up (e.g. on
+    // unmount in StrictMode).  `userUploadedRef` guards against the async
+    // restore overwriting a file the user has already selected before the
+    // IndexedDB read could resolve.
+    let cancelled = false;
+
     const loadBundled = () =>
       fetchBundledPdf()
         .then((file) => {
+          if (cancelled || userUploadedRef.current) return;
           setPdfFileState(file);
           setPdfName('irpg.pdf');
           // documentId stays BUILTIN_DOC_ID (its initial value)
         })
         .catch((err) => console.error('Could not auto-load irpg.pdf:', err))
-        .finally(() => setPdfLoading(false));
+        .finally(() => { if (!cancelled) setPdfLoading(false); });
 
     loadPdfFromIdb()
       .then((savedFile) => {
+        if (cancelled || userUploadedRef.current) return;
         if (savedFile) {
           // Restore the previously uploaded PDF with its correct documentId.
           setPdfFileState(savedFile);
@@ -194,7 +211,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           loadBundled();
         }
       })
-      .catch(() => loadBundled()); // IDB unavailable – fall back to bundled PDF
+      .catch(() => { if (!cancelled) loadBundled(); }); // IDB unavailable – fall back to bundled PDF
+
+    return () => { cancelled = true; };
   }, []); // intentionally empty – runs once on mount
 
   // Highlights
