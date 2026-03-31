@@ -15,6 +15,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Highlighter,
+  Bug,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { HIGHLIGHT_COLORS } from '../types';
@@ -87,6 +88,16 @@ export default function PDFViewer() {
   // Debounce timer for the selectionchange fallback (mobile touch handles).
   const selectionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Developer debug: visualise the react-pdf text layer and log selection info.
+  // Use a ref so captureCurrentSelection can read the flag without being re-created.
+  const [debugTextLayer, setDebugTextLayerState] = useState(false);
+  const debugTextLayerRef = useRef(false);
+  const toggleDebugTextLayer = useCallback(() => {
+    const next = !debugTextLayerRef.current;
+    debugTextLayerRef.current = next;
+    setDebugTextLayerState(next);
+  }, []);
+
   const onDocumentLoadSuccess = useCallback(
     (pdf: PDFDocumentProxy) => {
       setNumPages(pdf.numPages);
@@ -140,6 +151,33 @@ export default function PDFViewer() {
     }
 
     const scrollTop = containerEl?.scrollTop ?? 0;
+
+    // --- Debug logging (only when text-layer debug mode is active) ---
+    if (debugTextLayerRef.current) {
+      const spanEls = pageEl?.querySelectorAll<HTMLElement>(
+        '.react-pdf__Page__textContent span[role="presentation"], .react-pdf__Page__textContent span',
+      ) ?? [];
+      // Log a sample of the nearest spans to keep the console readable.
+      const spanSample = Array.from(spanEls)
+        .map((s) => {
+          const sr = s.getBoundingClientRect();
+          return {
+            text: s.textContent?.slice(0, 40) ?? '',
+            rect: { top: sr.top, left: sr.left, width: sr.width, height: sr.height },
+          };
+        })
+        .filter((s) => s.text.trim().length > 0)
+        .slice(0, 20);
+      console.group('[PDF Debug] Text selection on page', page);
+      console.log('Selected text:', text);
+      console.log('Selection rect (viewport):', {
+        top: selRect.top, left: selRect.left, width: selRect.width, height: selRect.height,
+      });
+      console.log('Normalised highlight rects (fraction of page):', rects);
+      console.log('Text-layer spans (sample, up to 20):', spanSample);
+      console.groupEnd();
+    }
+
     return {
       text,
       page,
@@ -148,7 +186,7 @@ export default function PDFViewer() {
       yBottom: selRect.bottom - containerRect.top + scrollTop,
       rects,
     };
-  }, []); // containerRef is a stable ref – no deps needed
+  }, []); // containerRef and debugTextLayerRef are stable refs – no deps needed
 
   /**
    * Pointer-up handler on the PDF container.
@@ -460,12 +498,23 @@ export default function PDFViewer() {
             {pdfName}
           </span>
         )}
+
+        {/* Developer tool: toggle text-layer debug visualisation */}
+        <button
+          className={`btn-icon ml-auto shrink-0${debugTextLayer ? ' text-orange-400' : ''}`}
+          onClick={toggleDebugTextLayer}
+          title={debugTextLayer ? 'Disable text-layer debug (Dev)' : 'Enable text-layer debug (Dev)'}
+          aria-label={debugTextLayer ? 'Disable text-layer debug mode' : 'Enable text-layer debug mode'}
+          aria-pressed={debugTextLayer}
+        >
+          <Bug size={14} />
+        </button>
       </div>
 
       {/* PDF pages */}
       <div
         ref={containerRef}
-        className="flex-1 overflow-y-auto pdf-container relative select-text"
+        className={`flex-1 overflow-y-auto pdf-container relative select-text${debugTextLayer ? ' pdf-debug-text-layer' : ''}`}
         onPointerUp={handlePointerUp}
       >
         <Document
