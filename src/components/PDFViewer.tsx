@@ -21,6 +21,7 @@ import {
   Maximize2,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { useDocStorage } from '../hooks/useDocStorage';
 import { HIGHLIGHT_COLORS } from '../types';
 import type { HighlightRect, SelectionState } from '../types';
 import HighlightToolbar from './HighlightToolbar';
@@ -69,6 +70,7 @@ export default function PDFViewer() {
   const {
     pdfFile,
     pdfLoading,
+    documentId,
     currentPage,
     setCurrentPage,
     numPages,
@@ -114,8 +116,8 @@ export default function PDFViewer() {
 
   // Fit mode: 'width' fills container width, 'page' fits entire page in view,
   // 'actual' uses 100% scale, null means manual zoom (uses `scale` from context).
-  // Defaults to 'width' for a better out-of-the-box desktop experience.
-  const [fitMode, setFitMode] = useState<FitMode>('width');
+  // Persisted per-document so the user's choice survives page reload.
+  const [fitMode, setFitMode] = useDocStorage<FitMode>(documentId, 'fitMode', 'width');
   // Natural (scale=1) dimensions of page 1, used to compute fit scales.
   const [naturalPageSize, setNaturalPageSize] = useState<{ width: number; height: number } | null>(null);
   // Current container dimensions tracked via ResizeObserver.
@@ -123,7 +125,7 @@ export default function PDFViewer() {
 
   const onDocumentLoadSuccess = useCallback(
     (pdf: PDFDocumentProxy) => {
-      setNumPages(pdf.numPages);
+      // Get page labels (independent, fire-and-forget).
       pdf
         .getPageLabels()
         .then((labels) =>
@@ -131,12 +133,21 @@ export default function PDFViewer() {
         )
         .catch(() => setPageLabels(null));
       // Fetch natural (scale=1) dimensions of page 1 for fit-mode calculations.
-      pdf.getPage(1).then((page) => {
-        const vp = page.getViewport({ scale: 1 });
-        setNaturalPageSize({ width: vp.width, height: vp.height });
-      }).catch((err) => {
-        console.warn('[PDFViewer] Could not fetch page dimensions for fit modes:', err);
-      });
+      // Set naturalPageSize BEFORE numPages so when pages first render the
+      // effectiveScale is already computed from the fit mode rather than
+      // falling back to the persisted manual scale (avoiding a scale jump).
+      pdf
+        .getPage(1)
+        .then((page) => {
+          const vp = page.getViewport({ scale: 1 });
+          setNaturalPageSize({ width: vp.width, height: vp.height });
+        })
+        .catch((err) => {
+          console.warn('[PDFViewer] Could not fetch page dimensions for fit modes:', err);
+        })
+        .finally(() => {
+          setNumPages(pdf.numPages);
+        });
     },
     [setNumPages, setPageLabels],
   );
@@ -376,9 +387,14 @@ export default function PDFViewer() {
   }, [pdfFile, numPages, currentPage, setCurrentPage]);
 
   // Track container size via ResizeObserver so fit modes recompute on resize.
+  // Also capture the initial dimensions immediately on mount so effectiveScale
+  // is computed from the real container width on the very first render, avoiding
+  // the flash where fit-width falls back to the persisted manual scale (1.2×).
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
+    // Synchronous initial read – prevents one frame of incorrect scale.
+    setContainerSize({ width: el.clientWidth, height: el.clientHeight });
     const ro = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (entry) {
