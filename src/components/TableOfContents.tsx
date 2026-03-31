@@ -35,15 +35,20 @@ function flattenOutline(
 function TOCNode({
   item,
   depth = 0,
+  pageLabels,
 }: {
   item: TOCItem;
   depth?: number;
+  pageLabels: string[] | null;
 }) {
   const { setCurrentPage, addBookmark, removeBookmark, isBookmarked, bookmarks } =
     useApp();
   const [open, setOpen] = useState(depth < 1);
   const hasChildren = item.items && item.items.length > 0;
   const bookmarked = isBookmarked(item.page);
+
+  // Resolve the display label for this item's page (e.g. "i", "A-1" or "42").
+  const displayLabel = pageLabels?.[item.page - 1] ?? String(item.page);
 
   const handleNavigate = () => {
     setCurrentPage(item.page);
@@ -80,13 +85,13 @@ function TOCNode({
         <button
           className="flex-1 text-left text-sm leading-snug truncate text-[var(--color-text)] py-0.5"
           onClick={handleNavigate}
-          title={`${item.title} – page ${item.page}`}
+          title={`${item.title} – page ${displayLabel}`}
         >
           {item.title}
         </button>
 
         <span className="text-xs text-[var(--color-text-muted)] shrink-0 mr-1">
-          {item.page}
+          {displayLabel}
         </span>
 
         <button
@@ -105,7 +110,7 @@ function TOCNode({
       {hasChildren && open && (
         <div>
           {item.items!.map((child, i) => (
-            <TOCNode key={i} item={child} depth={depth + 1} />
+            <TOCNode key={i} item={child} depth={depth + 1} pageLabels={pageLabels} />
           ))}
         </div>
       )}
@@ -117,17 +122,24 @@ export default function TableOfContents() {
   const { pdfFile, bookmarks, setCurrentPage, removeBookmark } = useApp();
   const [tocItems, setTocItems] = useState<TOCItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [pageLabels, setPageLabels] = useState<string[] | null>(null);
 
   const loadOutline = useCallback(async () => {
     if (!pdfFile) {
       setTocItems([]);
+      setPageLabels(null);
       return;
     }
     setLoading(true);
     try {
       const arrayBuffer = await pdfFile.arrayBuffer();
       const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
-      const outline = await pdf.getOutline();
+      const [outline, labels] = await Promise.all([
+        pdf.getOutline(),
+        pdf.getPageLabels().catch(() => null),
+      ]);
+
+      setPageLabels(labels && labels.length > 0 ? labels : null);
 
       if (!outline || outline.length === 0) {
         setTocItems([]);
@@ -195,29 +207,32 @@ export default function TableOfContents() {
           <div className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
             Bookmarks
           </div>
-          {bookmarks.map((bm) => (
-            <div
-              key={bm.id}
-              className="flex items-center gap-1 px-3 py-1 hover:bg-[var(--color-accent)]/10 rounded transition-colors"
-            >
-              <button
-                className="flex-1 text-left text-sm text-[var(--color-text)] truncate py-0.5"
-                onClick={() => setCurrentPage(bm.page)}
+          {bookmarks.map((bm) => {
+            const bmLabel = pageLabels?.[bm.page - 1] ?? String(bm.page);
+            return (
+              <div
+                key={bm.id}
+                className="flex items-center gap-1 px-3 py-1 hover:bg-[var(--color-accent)]/10 rounded transition-colors"
               >
-                📌 {bm.title}
-              </button>
-              <span className="text-xs text-[var(--color-text-muted)] shrink-0 mr-1">
-                {bm.page}
-              </span>
-              <button
-                onClick={() => removeBookmark(bm.id)}
-                className="text-[var(--color-text-muted)] hover:text-red-500 shrink-0"
-                title="Remove bookmark"
-              >
-                <BookmarkMinus size={14} />
-              </button>
-            </div>
-          ))}
+                <button
+                  className="flex-1 text-left text-sm text-[var(--color-text)] truncate py-0.5"
+                  onClick={() => setCurrentPage(bm.page)}
+                >
+                  📌 {bm.title}
+                </button>
+                <span className="text-xs text-[var(--color-text-muted)] shrink-0 mr-1">
+                  {bmLabel}
+                </span>
+                <button
+                  onClick={() => removeBookmark(bm.id)}
+                  className="text-[var(--color-text-muted)] hover:text-red-500 shrink-0"
+                  title="Remove bookmark"
+                >
+                  <BookmarkMinus size={14} />
+                </button>
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -237,7 +252,7 @@ export default function TableOfContents() {
       ) : (
         <div className="py-1">
           {tocItems.map((item, i) => (
-            <TOCNode key={i} item={item} depth={0} />
+            <TOCNode key={i} item={item} depth={0} pageLabels={pageLabels} />
           ))}
         </div>
       )}
