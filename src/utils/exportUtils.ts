@@ -142,11 +142,14 @@ export function buildReaderSessionText(payload: ExportPayload): string {
 
 // ── Clipboard copy ─────────────────────────────────────────────────────────
 
-/** Copies the session text to the clipboard. Returns true on success. */
-export async function copyReaderSessionToClipboard(
-  payload: ExportPayload,
-): Promise<boolean> {
-  const text = buildReaderSessionText(payload);
+/**
+ * Copies the given text to the clipboard.
+ * Returns true on success, false on failure.
+ *
+ * Falls back to the legacy `execCommand` approach in non-secure or older
+ * browser contexts where the Clipboard API is unavailable.
+ */
+export async function copyTextToClipboard(text: string): Promise<boolean> {
   try {
     if (navigator.clipboard && window.isSecureContext) {
       await navigator.clipboard.writeText(text);
@@ -165,6 +168,13 @@ export async function copyReaderSessionToClipboard(
   } catch {
     return false;
   }
+}
+
+/** Copies the session text to the clipboard. Returns true on success. */
+export async function copyReaderSessionToClipboard(
+  payload: ExportPayload,
+): Promise<boolean> {
+  return copyTextToClipboard(buildReaderSessionText(payload));
 }
 
 // ── .docx export ──────────────────────────────────────────────────────────
@@ -531,8 +541,11 @@ export async function exportFormOdt(
     import('jszip'),
     import('file-saver'),
   ]);
-  // JSZip ships as a CJS default export; Vite surfaces it under `.default`.
-  const JSZip = (JSZipModule as unknown as { default: typeof JSZipModule }).default ?? JSZipModule;
+  // JSZip ships as a CJS module; Vite exposes the constructor under `.default`.
+  const JSZipCtor: new () => import('jszip') =
+    'default' in JSZipModule
+      ? (JSZipModule as { default: new () => import('jszip') }).default
+      : (JSZipModule as unknown as new () => import('jszip'));
 
   const { form, formValues, pdfName } = payload;
 
@@ -634,8 +647,7 @@ export async function exportFormOdt(
     manifest:media-type="text/xml"/>
 </manifest:manifest>`;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const zip = new (JSZip as unknown as new () => any)();
+  const zip = new JSZipCtor();
   // The mimetype entry MUST be first and stored without compression (ODF spec).
   zip.file('mimetype', 'application/vnd.oasis.opendocument.text', {
     compression: 'STORE',
@@ -693,21 +705,8 @@ export async function shareFormViaTeams(
   }
 
   // Desktop: write to clipboard then attempt to open the Teams app.
-  try {
-    if (navigator.clipboard && window.isSecureContext) {
-      await navigator.clipboard.writeText(text);
-    } else {
-      const el = document.createElement('textarea');
-      el.value = text;
-      el.style.cssText = 'position:fixed;opacity:0;pointer-events:none';
-      document.body.appendChild(el);
-      el.select();
-      document.execCommand('copy');
-      document.body.removeChild(el);
-    }
-  } catch {
-    return 'error';
-  }
+  const copied = await copyTextToClipboard(text);
+  if (!copied) return 'error';
 
   // Open Teams with the first 4 000 chars pre-populated (protocol limit).
   const msgEncoded = encodeURIComponent(text.slice(0, 4000));

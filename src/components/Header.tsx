@@ -1,4 +1,4 @@
-import React, { useRef, useState, useCallback, useEffect } from 'react';
+import React, { useRef, useState, useCallback } from 'react';
 import {
   BookOpen,
   Moon,
@@ -19,6 +19,7 @@ import {
   parseDocBackup,
   readFileAsText,
 } from '../utils/backupUtils';
+import { useOutsideClick } from '../hooks/useOutsideClick';
 
 export default function Header() {
   const {
@@ -50,29 +51,8 @@ export default function Header() {
   const [importError, setImportError] = useState<string | null>(null);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
 
-  // Close the overflow menu when clicking/tapping outside of it
-  useEffect(() => {
-    if (!moreMenuOpen) return;
-    const handler = (e: MouseEvent | TouchEvent) => {
-      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) {
-        setMoreMenuOpen(false);
-      }
-    };
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setMoreMenuOpen(false);
-        moreMenuBtnRef.current?.focus();
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    document.addEventListener('touchstart', handler);
-    document.addEventListener('keydown', handleKey);
-    return () => {
-      document.removeEventListener('mousedown', handler);
-      document.removeEventListener('touchstart', handler);
-      document.removeEventListener('keydown', handleKey);
-    };
-  }, [moreMenuOpen]);
+  const closeMoreMenu = useCallback(() => setMoreMenuOpen(false), []);
+  useOutsideClick(moreMenuRef, moreMenuOpen, closeMoreMenu, moreMenuBtnRef);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

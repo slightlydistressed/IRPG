@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { useState, useCallback, useRef, useMemo } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
@@ -16,6 +16,7 @@ import { useApp } from '../context/AppContext';
 import { IRPG_FORMS } from '../data/irpgForms';
 import { BUILTIN_DOC_ID } from '../utils/docStorage';
 import {
+  copyTextToClipboard,
   copyReaderSessionToClipboard,
   exportReaderSessionDocx,
   buildFormText,
@@ -25,6 +26,7 @@ import {
   shareFormViaEmail,
   shareFormViaTeams,
 } from '../utils/exportUtils';
+import { useOutsideClick } from '../hooks/useOutsideClick';
 import type { FormSchema, FormField, DeviceAction } from '../types';
 
 // ── Device action helpers ─────────────────────────────────────────────────
@@ -277,32 +279,8 @@ function FormRenderer({
   const exportMenuRef = useRef<HTMLDivElement>(null);
   const exportMenuBtnRef = useRef<HTMLButtonElement>(null);
 
-  // Close menu on outside click / Escape
-  useEffect(() => {
-    if (!exportMenuOpen) return;
-    const onPointer = (e: MouseEvent | TouchEvent) => {
-      if (
-        exportMenuRef.current &&
-        !exportMenuRef.current.contains(e.target as Node)
-      ) {
-        setExportMenuOpen(false);
-      }
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setExportMenuOpen(false);
-        exportMenuBtnRef.current?.focus();
-      }
-    };
-    document.addEventListener('mousedown', onPointer);
-    document.addEventListener('touchstart', onPointer);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onPointer);
-      document.removeEventListener('touchstart', onPointer);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [exportMenuOpen]);
+  const closeExportMenu = useCallback(() => setExportMenuOpen(false), []);
+  useOutsideClick(exportMenuRef, exportMenuOpen, closeExportMenu, exportMenuBtnRef);
 
   const exportPayload = useMemo(
     () => ({ form, formValues, pdfName }),
@@ -311,22 +289,10 @@ function FormRenderer({
 
   const handleCopy = useCallback(async () => {
     const text = buildFormText({ form, formValues, pdfName });
-    try {
-      if (navigator.clipboard && window.isSecureContext) {
-        await navigator.clipboard.writeText(text);
-      } else {
-        const el = document.createElement('textarea');
-        el.value = text;
-        el.style.cssText = 'position:fixed;opacity:0;pointer-events:none';
-        document.body.appendChild(el);
-        el.select();
-        document.execCommand('copy');
-        document.body.removeChild(el);
-      }
+    const ok = await copyTextToClipboard(text);
+    if (ok) {
       setCopyDone(true);
       setTimeout(() => setCopyDone(false), 2000);
-    } catch {
-      /* ignore */
     }
     setExportMenuOpen(false);
   }, [form, formValues, pdfName]);
