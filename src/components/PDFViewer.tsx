@@ -5,6 +5,7 @@ import {
   useEffect,
 } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
+import type { PDFDocumentProxy } from 'pdfjs-dist';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 import {
@@ -31,6 +32,12 @@ const INTERACTIVE_TAGS = ['INPUT', 'TEXTAREA', 'SELECT', 'A', 'BUTTON'];
 
 /** How long (ms) a newly created or clicked highlight stays visually focused. */
 const HIGHLIGHT_FOCUS_DURATION_MS = 2000;
+
+/**
+ * Number of pages to keep pre-rendered on each side of the current page.
+ * Only (2 × RENDER_WINDOW + 1) pages are in the DOM at any time.
+ */
+const RENDER_WINDOW = 1;
 
 /** Walk the DOM to find the page number attribute */
 function getPageFromNode(node: Node | null): number {
@@ -71,15 +78,26 @@ export default function PDFViewer() {
   const [isEditingPage, setIsEditingPage] = useState(false);
   // Incremented to force a Document remount when the user clicks "Try Again".
   const [pdfDocKey, setPdfDocKey] = useState(0);
+  // Page labels from the PDF (e.g. "i", "ii", "1", "2"). null = use index.
+  const [pageLabels, setPageLabels] = useState<string[] | null>(null);
+  // When true, the upcoming scroll-to-top effect is suppressed so the
+  // selectedHighlightId scroll can position the view correctly.
+  const skipScrollToTopRef = useRef(false);
 
   // Debounce timer for the selectionchange fallback (mobile touch handles).
   const selectionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const onDocumentLoadSuccess = useCallback(
-    ({ numPages: n }: { numPages: number }) => {
-      setNumPages(n);
+    (pdf: PDFDocumentProxy) => {
+      setNumPages(pdf.numPages);
+      pdf
+        .getPageLabels()
+        .then((labels) =>
+          setPageLabels(labels && labels.length > 0 ? labels : null),
+        )
+        .catch(() => setPageLabels(null));
     },
-    [setNumPages],
+    [setNumPages, setPageLabels],
   );
 
   /**
@@ -210,8 +228,9 @@ export default function PDFViewer() {
 
   /**
    * When `selectedHighlightId` is set (either by creating a new highlight or
-   * by clicking one in the sidebar), scroll the PDF container so the first
-   * rect of that highlight is visible, then auto-clear the focus after 2 s.
+   * by clicking one in the sidebar), navigate to the highlight's page if
+   * needed, then scroll the container so the highlight rect is visible.
+   * Auto-clears the focus after HIGHLIGHT_FOCUS_DURATION_MS.
    */
   useEffect(() => {
     if (!selectedHighlightId) return;
@@ -220,6 +239,16 @@ export default function PDFViewer() {
       const clearTimer = setTimeout(() => setSelectedHighlightId(null), HIGHLIGHT_FOCUS_DURATION_MS);
       return () => clearTimeout(clearTimer);
     }
+
+    // If the highlight is on a different page, navigate there first.
+    // skipScrollToTopRef prevents the scroll-to-top effect from overriding
+    // the highlight scroll that runs on the subsequent render.
+    if (h.page !== currentPage) {
+      skipScrollToTopRef.current = true;
+      setCurrentPage(h.page);
+      return; // effect re-runs after currentPage updates
+    }
+
     const container = containerRef.current;
     if (!container) {
       const clearTimer = setTimeout(() => setSelectedHighlightId(null), HIGHLIGHT_FOCUS_DURATION_MS);
@@ -246,35 +275,19 @@ export default function PDFViewer() {
 
     const clearTimer = setTimeout(() => setSelectedHighlightId(null), HIGHLIGHT_FOCUS_DURATION_MS);
     return () => clearTimeout(clearTimer);
-  }, [selectedHighlightId, highlights, setSelectedHighlightId]);
+  }, [selectedHighlightId, highlights, currentPage, setCurrentPage, setSelectedHighlightId]);
 
-  // Scroll to page when currentPage changes or when a force-scroll is requested
+  // In single-page view, scroll the container back to the top whenever the
+  // active page changes (unless a highlight-scroll is about to handle it).
+  // scrollKey forces a re-run even when currentPage hasn't changed.
   useEffect(() => {
-    const el = pageRefs.current.get(currentPage);
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (skipScrollToTopRef.current) {
+      skipScrollToTopRef.current = false;
+      return;
     }
+    containerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
   // scrollKey intentionally forces a re-run even when currentPage hasn't changed
   }, [currentPage, scrollKey]);
-
-  // Track visible page via IntersectionObserver
-  useEffect(() => {
-    if (!containerRef.current || numPages === 0) return;
-    const observers: IntersectionObserver[] = [];
-
-    pageRefs.current.forEach((el, pg) => {
-      const obs = new IntersectionObserver(
-        ([entry]) => {
-          if (entry.isIntersecting) setCurrentPage(pg);
-        },
-        { threshold: 0.5, root: containerRef.current },
-      );
-      obs.observe(el);
-      observers.push(obs);
-    });
-
-    return () => observers.forEach((o) => o.disconnect());
-  }, [numPages, setCurrentPage]);
 
   // Keyboard shortcuts: ArrowLeft/Right and PageUp/Down for page navigation
   // Only fires when focus is not on an interactive element to avoid conflicts.
@@ -475,65 +488,91 @@ export default function PDFViewer() {
               </button>
             </div>
           }
-          className="flex flex-col items-center gap-4 py-4"
+          className="flex flex-col items-center py-4"
         >
-          {Array.from({ length: numPages }, (_, i) => i + 1).map((pg) => (
-            <div
-              key={pg}
-              ref={(el) => {
-                if (el) pageRefs.current.set(pg, el);
-                else pageRefs.current.delete(pg);
-              }}
-              data-page-number={pg}
-              className="shadow-lg relative"
-            >
-              <Page
-                pageNumber={pg}
-                scale={scale}
-                renderTextLayer
-                renderAnnotationLayer
-              />
-              {/* Highlight overlay layer.
-                  z-index: 1 places this container above the PDF canvas (z-index auto)
-                  but below the text-selection layer (z-index 2) and annotation layer
-                  (z-index 3).  react-pdf__Page has only position:relative (no z-index)
-                  so it does not create a new stacking context, meaning all z-indexes
-                  here compare in the same ancestor context.
-                  Result: highlight color appears as a true background behind the
-                  rendered PDF text — text stays fully readable and selectable. */}
+          {Array.from({ length: numPages }, (_, i) => i + 1).map((pg) => {
+            const distFromCurrent = Math.abs(pg - currentPage);
+            // Pages outside the render window are completely removed from the DOM.
+            if (distFromCurrent > RENDER_WINDOW) return null;
+
+            const isVisible = pg === currentPage;
+            // Use the PDF's own page label (e.g. "i", "A-1") when available,
+            // otherwise fall back to the 1-based page index.
+            const pageLabel = pageLabels?.[pg - 1] ?? String(pg);
+
+            return (
               <div
-                className="absolute inset-0 pointer-events-none"
-                style={{ zIndex: 1 }}
+                key={pg}
+                ref={(el) => {
+                  if (el) pageRefs.current.set(pg, el);
+                  else pageRefs.current.delete(pg);
+                }}
+                data-page-number={pg}
+                className="shadow-lg relative"
+                style={isVisible ? undefined : { display: 'none' }}
               >
-                {highlights
-                  .filter((h) => h.page === pg && h.rects && h.rects.length > 0)
-                  .flatMap((h) => {
-                    const isSelected = h.id === selectedHighlightId;
-                    return h.rects!.map((r, i) => (
-                      <div
-                        key={`${h.id}-${i}`}
-                        className={`absolute transition-opacity ${
-                          isSelected
-                            ? ''
-                            : 'dark:mix-blend-screen mix-blend-multiply'
-                        }`}
-                        style={{
-                          left: `${r.left * 100}%`,
-                          top: `${r.top * 100}%`,
-                          width: `${r.width * 100}%`,
-                          height: `${r.height * 100}%`,
-                          backgroundColor: h.color,
-                          opacity: isSelected ? 0.85 : 0.6,
-                          boxShadow: isSelected
-                            ? '0 0 0 2px var(--color-accent)'
-                            : undefined,
-                        }}
-                      />
-                    ));
-                  })}
+                <Page
+                  pageNumber={pg}
+                  scale={scale}
+                  renderTextLayer
+                  renderAnnotationLayer
+                />
+                {/* Highlight overlay layer.
+                    z-index: 1 places this container above the PDF canvas (z-index auto)
+                    but below the text-selection layer (z-index 2) and annotation layer
+                    (z-index 3).  react-pdf__Page has only position:relative (no z-index)
+                    so it does not create a new stacking context, meaning all z-indexes
+                    here compare in the same ancestor context.
+                    Result: highlight color appears as a true background behind the
+                    rendered PDF text — text stays fully readable and selectable. */}
+                <div
+                  className="absolute inset-0 pointer-events-none"
+                  style={{ zIndex: 1 }}
+                >
+                  {highlights
+                    .filter((h) => h.page === pg && h.rects && h.rects.length > 0)
+                    .flatMap((h) => {
+                      const isSelected = h.id === selectedHighlightId;
+                      return h.rects!.map((r, i) => (
+                        <div
+                          key={`${h.id}-${i}`}
+                          className={`absolute transition-opacity ${
+                            isSelected
+                              ? ''
+                              : 'dark:mix-blend-screen mix-blend-multiply'
+                          }`}
+                          style={{
+                            left: `${r.left * 100}%`,
+                            top: `${r.top * 100}%`,
+                            width: `${r.width * 100}%`,
+                            height: `${r.height * 100}%`,
+                            backgroundColor: h.color,
+                            opacity: isSelected ? 0.85 : 0.6,
+                            boxShadow: isSelected
+                              ? '0 0 0 2px var(--color-accent)'
+                              : undefined,
+                          }}
+                        />
+                      ));
+                    })}
+                </div>
+                {/* Static page label badge – helps readers match the on-screen page
+                    to the Table of Contents. Shows the PDF's own page label when the
+                    document defines one (e.g. "i", "A-1"), otherwise the page index. */}
+                <div
+                  aria-hidden="true"
+                  className="absolute bottom-2 right-2 pointer-events-none select-none text-xs font-mono px-1.5 py-0.5 rounded"
+                  style={{
+                    zIndex: 10,
+                    background: 'rgba(0,0,0,0.4)',
+                    color: 'rgba(255,255,255,0.9)',
+                  }}
+                >
+                  {pageLabel}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </Document>
 
         {/* Floating highlight toolbar – viewport-clamped via HighlightToolbar */}
