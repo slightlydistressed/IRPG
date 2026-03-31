@@ -1,8 +1,12 @@
 import { useState, useCallback } from 'react';
-import { ChevronLeft, ChevronRight, MapPin, Clock, Calendar } from 'lucide-react';
+import { ChevronLeft, ChevronRight, MapPin, Clock, Calendar, Copy, FileDown } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { IRPG_FORMS } from '../data/irpgForms';
 import { BUILTIN_DOC_ID } from '../utils/docStorage';
+import {
+  copyReaderSessionToClipboard,
+  exportReaderSessionDocx,
+} from '../utils/exportUtils';
 import type { FormSchema, FormField, DeviceAction } from '../types';
 
 // ── Device action helpers ─────────────────────────────────────────────────
@@ -386,9 +390,14 @@ export default function FormPanel() {
     setFormValue,
     scrollToPage,
     setSidebarOpen,
+    pdfName,
+    highlights,
+    bookmarks,
   } = useApp();
 
   const [selectedForm, setSelectedForm] = useState<FormSchema | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const isBuiltin = documentId === BUILTIN_DOC_ID;
 
@@ -406,6 +415,36 @@ export default function FormPanel() {
     [scrollToPage, setSidebarOpen],
   );
 
+  const handleCopy = useCallback(async () => {
+    const ok = await copyReaderSessionToClipboard({
+      pdfName,
+      forms: availableForms,
+      formValues,
+      highlights,
+      bookmarks,
+    });
+    if (ok) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  }, [pdfName, availableForms, formValues, highlights, bookmarks]);
+
+  const handleDocx = useCallback(async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      await exportReaderSessionDocx({
+        pdfName,
+        forms: availableForms,
+        formValues,
+        highlights,
+        bookmarks,
+      });
+    } finally {
+      setExporting(false);
+    }
+  }, [pdfName, availableForms, formValues, highlights, bookmarks, exporting]);
+
   if (selectedForm) {
     return (
       <FormRenderer
@@ -421,12 +460,36 @@ export default function FormPanel() {
   return (
     <div className="flex flex-col h-full">
       {/* Panel header */}
-      <div className="px-3 py-2 border-b border-[var(--color-border)] shrink-0">
-        <p className="text-xs text-[var(--color-text-muted)]">
+      <div className="px-3 py-2 border-b border-[var(--color-border)] shrink-0 flex items-center justify-between gap-2">
+        <p className="text-xs text-[var(--color-text-muted)] flex-1 min-w-0">
           {isBuiltin
             ? 'IRPG forms and checklists'
             : 'Available forms for this document'}
         </p>
+        {/* Export actions */}
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={handleCopy}
+            className={`btn-icon transition-colors ${
+              copied
+                ? 'text-green-500'
+                : 'text-[var(--color-text-muted)] hover:text-[var(--color-accent)]'
+            }`}
+            title={copied ? 'Copied to clipboard!' : 'Copy session to clipboard'}
+            aria-label={copied ? 'Copied to clipboard' : 'Copy session to clipboard'}
+          >
+            <Copy size={14} />
+          </button>
+          <button
+            onClick={handleDocx}
+            disabled={exporting}
+            className="btn-icon text-[var(--color-text-muted)] hover:text-[var(--color-accent)] transition-colors disabled:opacity-40"
+            title="Export session as .docx"
+            aria-label="Export session as .docx"
+          >
+            <FileDown size={14} />
+          </button>
+        </div>
       </div>
       <div className="flex-1 overflow-y-auto">
         <FormList
