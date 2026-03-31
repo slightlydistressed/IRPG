@@ -7,8 +7,12 @@ interface HighlightToolbarProps {
   selection: SelectionState;
   chosenColor: string;
   onColorChange: (color: string) => void;
-  /** Called when the user confirms the highlight (step 2). Receives the note text (may be empty). */
-  onHighlight: (note: string) => void;
+  /**
+   * Called when the user confirms the highlight (step 2).
+   * Receives the note text (may be empty) and the snapshotted selection
+   * captured at the moment the user clicked "Highlight" in step 1.
+   */
+  onHighlight: (note: string, snapshotted: SelectionState) => void;
   onDismiss: () => void;
   /** The scrollable PDF container – used for clamping the toolbar position. */
   containerRef: React.RefObject<HTMLDivElement | null>;
@@ -45,6 +49,10 @@ export default function HighlightToolbar({
   // Two-step flow: 'pick' (colour + confirm) → 'note' (optional note entry)
   const [step, setStep] = useState<'pick' | 'note'>('pick');
   const [note, setNote] = useState('');
+  // Snapshot the selection when the user clicks "Highlight" in step 1 so it
+  // remains available in step 2 even if the textarea's autoFocus clears the
+  // browser's native selection and causes PDFViewer to null out its state.
+  const snapshotRef = useRef<SelectionState>(selection);
 
   useLayoutEffect(() => {
     const toolbar = toolbarRef.current;
@@ -73,6 +81,10 @@ export default function HighlightToolbar({
   const stopPointer = (e: React.PointerEvent) => e.stopPropagation();
 
   const handleHighlightClick = () => {
+    // Snapshot the selection NOW before the textarea steals focus and the
+    // browser collapses the native selection (which would null out the parent's
+    // `selection` state via the selectionchange listener).
+    snapshotRef.current = selection;
     setStep('note');
     setNote('');
   };
@@ -148,25 +160,25 @@ export default function HighlightToolbar({
               if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
                 e.preventDefault();
                 e.stopPropagation();
-                onHighlight(note.trim());
+                onHighlight(note.trim(), snapshotRef.current);
               }
               if (e.key === 'Escape') {
                 e.preventDefault();
                 e.stopPropagation();
-                onHighlight('');
+                onHighlight('', snapshotRef.current);
               }
             }}
           />
 
           <div className="flex gap-1 justify-end">
             <button
-              onClick={() => onHighlight(note.trim())}
+              onClick={() => onHighlight(note.trim(), snapshotRef.current)}
               className="btn-primary btn-sm"
             >
               Save
             </button>
             <button
-              onClick={() => onHighlight('')}
+              onClick={() => onHighlight('', snapshotRef.current)}
               className="btn-ghost btn-sm"
             >
               Skip
