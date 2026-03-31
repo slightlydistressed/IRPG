@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState, useCallback } from 'react';
 import {
   BookOpen,
   Moon,
@@ -8,8 +8,16 @@ import {
   PanelLeftClose,
   BookmarkCheck,
   LayoutGrid,
+  Download,
+  FolderOpen,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import {
+  buildDocBackup,
+  downloadDocBackup,
+  parseDocBackup,
+  readFileAsText,
+} from '../utils/backupUtils';
 
 export default function Header() {
   const {
@@ -27,9 +35,16 @@ export default function Header() {
     addBookmark,
     removeBookmark,
     bookmarks,
+    documentId,
+    highlights,
+    formValues,
+    scale,
+    restoreDocumentData,
   } = useApp();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const backupInputRef = useRef<HTMLInputElement>(null);
+  const [importError, setImportError] = useState<string | null>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -66,6 +81,69 @@ export default function Header() {
       addBookmark(label, currentPage);
     }
   };
+
+  const handleExportBackup = useCallback(() => {
+    if (!pdfName) return;
+    const backup = buildDocBackup(
+      documentId,
+      pdfName,
+      highlights,
+      bookmarks,
+      formValues,
+      currentPage,
+      scale,
+    );
+    downloadDocBackup(backup);
+  }, [documentId, pdfName, highlights, bookmarks, formValues, currentPage, scale]);
+
+  const handleImportBackupFile = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      e.target.value = '';
+      if (!file) return;
+
+      setImportError(null);
+      let text: string;
+      try {
+        text = await readFileAsText(file);
+      } catch {
+        setImportError('Could not read the backup file.');
+        setTimeout(() => setImportError(null), 5000);
+        return;
+      }
+
+      const backup = parseDocBackup(text);
+      if (!backup) {
+        setImportError('The selected file is not a valid IRPG Reader backup.');
+        setTimeout(() => setImportError(null), 5000);
+        return;
+      }
+
+      if (backup.docId !== documentId) {
+        const proceed = window.confirm(
+          `This backup is for "${backup.pdfName}" (not the currently open document).\n\n` +
+            `Importing it will overwrite your current data for this document.\n\n` +
+            `Continue anyway?`,
+        );
+        if (!proceed) return;
+      } else {
+        const proceed = window.confirm(
+          `Restore backup from ${new Date(backup.exportedAt).toLocaleString()}?\n\n` +
+            `This will replace your current highlights, bookmarks, and form data for this document.`,
+        );
+        if (!proceed) return;
+      }
+
+      restoreDocumentData({
+        highlights: backup.highlights,
+        bookmarks: backup.bookmarks,
+        formValues: backup.formValues,
+        currentPage: backup.currentPage,
+        scale: backup.scale,
+      });
+    },
+    [documentId, restoreDocumentData],
+  );
 
   return (
     <header className="header flex items-center justify-between px-4 py-2 shadow-md z-10 shrink-0">
@@ -132,6 +210,50 @@ export default function Header() {
           >
             <BookmarkCheck size={20} />
           </button>
+        )}
+
+        {/* Backup: export */}
+        {pdfName && (
+          <button
+            onClick={handleExportBackup}
+            className="btn-icon"
+            title="Export backup for this document"
+            aria-label="Export backup for this document"
+          >
+            <Download size={19} />
+          </button>
+        )}
+
+        {/* Backup: import */}
+        {pdfName && (
+          <button
+            onClick={() => backupInputRef.current?.click()}
+            className="btn-icon"
+            title="Import backup for this document"
+            aria-label="Import backup for this document"
+          >
+            <FolderOpen size={19} />
+          </button>
+        )}
+
+        <input
+          ref={backupInputRef}
+          type="file"
+          accept="application/json"
+          className="hidden"
+          onChange={handleImportBackupFile}
+          aria-label="Import backup file"
+        />
+
+        {/* Import error flash */}
+        {importError && (
+          <span
+            role="alert"
+            className="text-xs text-red-300 bg-red-900/40 px-2 py-1 rounded max-w-[160px] truncate"
+            title={importError}
+          >
+            {importError}
+          </span>
         )}
 
         <button

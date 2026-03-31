@@ -114,6 +114,19 @@ interface AppState {
   /** Scrolls to the given page even if currentPage is already set to that value. */
   scrollToPage: (page: number) => void;
   scrollKey: number;
+
+  // Backup / restore
+  /**
+   * Bulk-restores reader state from a previously exported backup.
+   * All fields are optional; only provided values are applied.
+   */
+  restoreDocumentData: (data: {
+    highlights?: Highlight[];
+    bookmarks?: Bookmark[];
+    formValues?: FormValues;
+    currentPage?: number;
+    scale?: number;
+  }) => void;
 }
 
 const AppContext = createContext<AppState | null>(null);
@@ -342,6 +355,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [setCurrentPage],
   );
 
+  const restoreDocumentData = useCallback(
+    (data: {
+      highlights?: Highlight[];
+      bookmarks?: Bookmark[];
+      formValues?: FormValues;
+      currentPage?: number;
+      scale?: number;
+    }) => {
+      if (data.highlights !== undefined) setHighlights(data.highlights);
+      if (data.bookmarks !== undefined) setBookmarks(data.bookmarks);
+      if (data.formValues !== undefined) setFormValues(data.formValues);
+      if (data.scale !== undefined) setScale(data.scale);
+      if (data.currentPage !== undefined) scrollToPage(data.currentPage);
+    },
+    [setHighlights, setBookmarks, setFormValues, setScale, scrollToPage],
+  );
+
   return (
     <AppContext.Provider
       value={{
@@ -387,6 +417,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         scrollToPage,
         scrollKey,
         isUploadedPdf: documentId !== BUILTIN_DOC_ID,
+        restoreDocumentData,
       }}
     >
       {children}
