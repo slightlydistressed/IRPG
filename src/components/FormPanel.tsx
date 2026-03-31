@@ -172,6 +172,11 @@ function FieldRenderer({ formId, field, value, onChange }: FieldRendererProps) {
       {deviceError && (
         <p className="text-xs text-red-500 mt-1">{deviceError}</p>
       )}
+      {field.deviceAction?.type === 'geolocation' && !deviceError && (
+        <p className="text-xs text-[var(--color-text-muted)] mt-1">
+          Location is optional — you can type a value instead. If requested, your browser may ask for permission. Nothing is sent off your device.
+        </p>
+      )}
     </div>
   );
 }

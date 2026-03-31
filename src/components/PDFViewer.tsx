@@ -333,7 +333,7 @@ export default function PDFViewer() {
             <li>Interactive table of contents</li>
             <li>Text highlighting with notes</li>
             <li>Page bookmarks</li>
-            <li>Q&amp;A section with Word export</li>
+            <li>Forms &amp; checklists with export</li>
             <li>Dark &amp; light mode</li>
             <li>Works offline</li>
           </ul>

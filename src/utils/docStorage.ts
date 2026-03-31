@@ -2,7 +2,7 @@
  * Document-scoped localStorage utilities.
  *
  * Every PDF the user opens gets a stable "document ID" so that highlights,
- * bookmarks, Q&A, page position, and zoom are stored separately per document
+ * bookmarks, form values, page position, and zoom are stored separately per document
  * instead of in one global bucket.
  */
 
