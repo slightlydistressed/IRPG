@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { AppProvider } from './context/AppContext';
+import { useApp } from './context/AppContext';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import PDFViewer from './components/PDFViewer';
 import MobileNav from './components/MobileNav';
+import HomeView from './components/HomeView';
 
 /**
  * Listens for `irpg-storage-full` (localStorage quota exceeded) and
@@ -50,20 +52,37 @@ function AppWarningBanner() {
   );
 }
 
+function AppShell() {
+  const { view } = useApp();
+
+  if (view === 'home') {
+    return (
+      <>
+        <AppWarningBanner />
+        <HomeView />
+      </>
+    );
+  }
+
+  return (
+    <div className="app-shell">
+      <Header />
+      <AppWarningBanner />
+      <div className="app-body">
+        <Sidebar />
+        <main className="main-content">
+          <PDFViewer />
+        </main>
+      </div>
+      <MobileNav />
+    </div>
+  );
+}
+
 function App() {
   return (
     <AppProvider>
-      <div className="app-shell">
-        <Header />
-        <AppWarningBanner />
-        <div className="app-body">
-          <Sidebar />
-          <main className="main-content">
-            <PDFViewer />
-          </main>
-        </div>
-        <MobileNav />
-      </div>
+      <AppShell />
     </AppProvider>
   );
 }

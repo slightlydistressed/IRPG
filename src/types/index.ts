@@ -31,12 +31,6 @@ export interface Bookmark {
   createdAt: string;
 }
 
-export interface QAPair {
-  id: string;
-  question: string;
-  answer: string;
-  page?: number;
-}
 
 export interface TOCItem {
   title: string;

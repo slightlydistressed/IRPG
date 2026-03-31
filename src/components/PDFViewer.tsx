@@ -333,7 +333,7 @@ export default function PDFViewer() {
             <li>Interactive table of contents</li>
             <li>Text highlighting with notes</li>
             <li>Page bookmarks</li>
-            <li>Q&amp;A section with Word export</li>
+            <li>Forms &amp; checklists with export</li>
             <li>Dark &amp; light mode</li>
             <li>Works offline</li>
           </ul>
@@ -345,8 +345,8 @@ export default function PDFViewer() {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Toolbar */}
-      <div className="viewer-toolbar flex items-center gap-2 px-3 py-1.5 border-b border-[var(--color-border)] shrink-0 overflow-x-auto">
-        <div className="flex items-center gap-1 shrink-0">
+      <div className="viewer-toolbar flex items-center gap-2 px-3 py-1.5 shrink-0 overflow-x-auto">
+        <div className="toolbar-group shrink-0">
           <button
             className="btn-icon"
             onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
@@ -359,7 +359,7 @@ export default function PDFViewer() {
           {isEditingPage ? (
             <input
               type="number"
-              className="input-base text-sm font-mono text-center min-w-[60px] max-w-[60px] px-1 py-0.5"
+              className="input-base text-sm font-mono text-center min-w-[56px] max-w-[56px] px-1 py-0.5"
               value={pageInputValue}
               min={1}
               max={numPages}
@@ -373,7 +373,7 @@ export default function PDFViewer() {
             />
           ) : (
             <button
-              className="text-sm font-mono text-[var(--color-text)] min-w-[80px] text-center hover:bg-[var(--color-border)]/40 rounded px-1 py-0.5 transition-colors"
+              className="text-sm font-mono text-[var(--color-text)] min-w-[76px] text-center hover:bg-[var(--color-border)]/60 rounded px-1 py-0.5 transition-colors"
               onClick={handleStartPageEdit}
               title="Click to jump to a page"
               aria-label={`Page ${currentPage} of ${numPages}. Click to jump to a page.`}
@@ -392,9 +392,7 @@ export default function PDFViewer() {
           </button>
         </div>
 
-        <div className="w-px h-5 bg-[var(--color-border)]" />
-
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="toolbar-group shrink-0">
           <button
             className="btn-icon"
             onClick={() => setScale(Math.max(0.5, scale - 0.1))}
@@ -404,7 +402,7 @@ export default function PDFViewer() {
           >
             <ZoomOut size={18} />
           </button>
-          <span className="text-sm font-mono text-[var(--color-text)] min-w-[52px] text-center" aria-live="polite" aria-label={`Zoom level ${Math.round(scale * 100)} percent`}>
+          <span className="text-sm font-mono text-[var(--color-text)] min-w-[48px] text-center" aria-live="polite" aria-label={`Zoom level ${Math.round(scale * 100)} percent`}>
             {Math.round(scale * 100)}%
           </span>
           <button
@@ -427,10 +425,8 @@ export default function PDFViewer() {
         </div>
 
         {/* Colour pre-selector – hidden on mobile (the floating HighlightToolbar has its own) */}
-        <div className="hidden sm:block w-px h-5 bg-[var(--color-border)]" />
-
-        <div className="hidden sm:flex items-center gap-1 shrink-0">
-          <Highlighter size={14} className="text-[var(--color-text-muted)]" />
+        <div className="hidden sm:flex toolbar-group shrink-0">
+          <Highlighter size={14} className="text-[var(--color-text-muted)] mx-1" />
           {HIGHLIGHT_COLORS.map((c) => (
             <button
               key={c.value}

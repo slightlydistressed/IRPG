@@ -1,6 +1,6 @@
 # IRPG PDF Reader
 
-An interactive PDF reader built with React, TypeScript, and Vite. Load any PDF document and annotate it with highlights, bookmarks, and Q&A pairs — all stored locally in your browser.
+An offline-first, installable PDF reader PWA built with React, TypeScript, and Vite. Load any PDF document and annotate it with highlights, bookmarks, and structured forms/checklists — all stored locally in your browser, no account or internet connection required.
 
 ## Features
 
@@ -8,10 +8,18 @@ An interactive PDF reader built with React, TypeScript, and Vite. Load any PDF d
 - **Text Highlighting** — Select any text and highlight it in five colours; add notes to each highlight
 - **Bookmarks** — Bookmark any page for quick navigation
 - **Table of Contents** — Automatically extracted from the PDF outline
-- **Q&A Section** — Questions are auto-extracted from the document; write answers and export as a Word (.docx) file or send by email
+- **Forms & Checklists** — Schema-driven forms tied to the IRPG document; supports device-assisted fields (current date, time, and optional geolocation — all optional and stored locally)
+- **Export** — Export your session (forms, highlights, bookmarks) as a Word (.docx) file or copy it to the clipboard
+- **Backup & Restore** — Download a per-document JSON backup and reimport it at any time
 - **Dark & Light Mode** — Toggle between themes; preference is remembered
-- **Offline Support** — Progressive Web App with a service worker so the reader works without a network connection
+- **Offline / PWA** — Progressive Web App with a service worker; works without a network connection after the first load. Installable on desktop and mobile.
 - **Keyboard Shortcuts** — Navigate pages with Arrow keys or Page Up / Page Down
+
+## Privacy & data storage
+
+All data — highlights, bookmarks, form values, page position, zoom — is stored **only in your browser** (localStorage for reader state, IndexedDB for uploaded PDFs). Nothing is sent to any server. Uploaded PDFs and annotations stay on your device unless you explicitly export or back them up.
+
+Device-assisted form fields (location, date, time) are **optional**. You can always type values manually. If location is requested, your browser will ask for permission first, and the result is only written to the form field — it is never transmitted anywhere.
 
 ## Getting Started
 
@@ -23,11 +31,8 @@ An interactive PDF reader built with React, TypeScript, and Vite. Load any PDF d
 ### Installation
 
 ```bash
-# Clone the repository
 git clone https://github.com/slightlydistressed/IRPG.git
 cd IRPG
-
-# Install dependencies
 npm install
 ```
 
@@ -63,13 +68,15 @@ npm run lint
 
 ## Usage
 
-1. **Open a PDF** — Click the folder icon in the header to upload any PDF file, or the bundled `irpg.pdf` loads automatically on first launch.
+1. **Open a PDF** — On the home screen, tap **Open** next to the built-in IRPG, reopen a previously saved upload, or tap **Open a PDF from your device** to upload any PDF.
 2. **Highlight text** — Select any text on a page; a floating toolbar appears where you can pick a colour and confirm the highlight.
 3. **Add notes** — Open the **Highlights** tab in the sidebar to add or edit notes attached to each highlight.
 4. **Bookmarks** — Click the bookmark icon in the header to bookmark the current page. Manage bookmarks from the **Table of Contents** tab.
-5. **Q&A** — Open the **Q&A** tab to see questions extracted from the document. Write answers in the text fields, then export to Word or email.
-6. **Navigate** — Use the toolbar arrows, click the page counter to jump to a specific page, or use keyboard shortcuts (← → Page Up Page Down).
-7. **Zoom** — Use the ± buttons in the toolbar or reset zoom with the reset button.
+5. **Forms & Checklists** — Open the **Forms** tab in the sidebar to fill in structured checklists linked to the IRPG document. Device-assisted fields (location, date, time) are optional; tap **Set** to auto-fill or type manually.
+6. **Export** — In the Forms tab, click the export icon to download a `.docx` file or copy your session to the clipboard.
+7. **Backup & Restore** — In the reader header, use the download icon to save a JSON backup of your highlights, bookmarks, and form values; use the folder icon to restore a backup.
+8. **Navigate** — Use the toolbar arrows, click the page counter to jump to a specific page, or use keyboard shortcuts (← → Page Up Page Down).
+9. **Zoom** — Use the ± buttons in the toolbar or reset zoom with the reset button.
 
 ## Project Structure
 
@@ -77,11 +84,13 @@ npm run lint
 src/
 ├── components/       # UI components (Header, Sidebar, PDFViewer, …)
 ├── context/          # React Context for global app state
+├── data/             # Form/checklist schema definitions
 ├── hooks/            # Custom React hooks
 ├── types/            # TypeScript interfaces and constants
-└── utils/            # Export utilities (Word, email)
+└── utils/            # Export, backup, and storage utilities
 public/
 ├── irpg.pdf          # Default bundled PDF
+├── manifest.json     # PWA manifest
 └── sw.js             # Service worker for offline support
 ```
 

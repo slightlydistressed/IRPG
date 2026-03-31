@@ -2,7 +2,7 @@
  * Document-scoped localStorage utilities.
  *
  * Every PDF the user opens gets a stable "document ID" so that highlights,
- * bookmarks, Q&A, page position, and zoom are stored separately per document
+ * bookmarks, form values, page position, and zoom are stored separately per document
  * instead of in one global bucket.
  */
 
@@ -41,7 +41,6 @@ export function migrateGlobalData(): void {
     const pairs: [string, string][] = [
       ['irpg-highlights', docKey(BUILTIN_DOC_ID, 'highlights')],
       ['irpg-bookmarks', docKey(BUILTIN_DOC_ID, 'bookmarks')],
-      ['irpg-qa', docKey(BUILTIN_DOC_ID, 'qa')],
     ];
 
     for (const [oldKey, newKey] of pairs) {

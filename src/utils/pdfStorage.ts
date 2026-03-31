@@ -96,6 +96,31 @@ export async function loadPdfFromIdb(): Promise<File | null> {
   });
 }
 
+/**
+ * Read only the metadata (name, size) of the stored uploaded PDF.
+ * Returns `null` if nothing is stored.  Does NOT load the blob.
+ */
+export async function getUploadedPdfMeta(): Promise<{ name: string; size: number } | null> {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readonly');
+    const req = tx.objectStore(STORE_NAME).get(RECORD_KEY);
+    tx.oncomplete = () => {
+      db.close();
+      const record = req.result as PdfRecord | undefined;
+      resolve(record ? { name: record.name, size: record.size } : null);
+    };
+    tx.onerror = () => {
+      db.close();
+      reject(tx.error);
+    };
+    tx.onabort = () => {
+      db.close();
+      reject(tx.error);
+    };
+  });
+}
+
 /** Remove the stored uploaded PDF so the app reverts to the bundled file. */
 export async function deletePdfFromIdb(): Promise<void> {
   const db = await openDb();

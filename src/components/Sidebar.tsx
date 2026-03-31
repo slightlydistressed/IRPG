@@ -1,10 +1,13 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { List, Highlighter, ClipboardList } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import TableOfContents from './TableOfContents';
 import HighlightPanel from './HighlightPanel';
-import FormPanel from './FormPanel';
 import type { SidebarTab } from '../types';
+
+// FormPanel imports docx export utilities; lazy-load it so those heavy
+// modules are deferred until the user first opens the Forms tab.
+const FormPanel = lazy(() => import('./FormPanel'));
 
 const TABS: { id: SidebarTab; label: string; Icon: React.ElementType }[] = [
   { id: 'toc', label: 'Contents', Icon: List },
@@ -28,7 +31,7 @@ export default function Sidebar() {
 
       <aside className={`sidebar flex flex-col shrink-0 overflow-hidden${sidebarOpen ? ' sidebar-open' : ''}`}>
         {/* Tab bar */}
-        <div className="flex border-b border-[var(--color-border)]">
+        <div className="flex border-b border-[var(--color-border)] shrink-0" role="tablist">
           {TABS.map(({ id, label, Icon }) => (
             <button
               key={id}
@@ -60,7 +63,11 @@ export default function Sidebar() {
         <div className="flex-1 overflow-y-auto">
           {sidebarTab === 'toc' && <TableOfContents />}
           {sidebarTab === 'highlights' && <HighlightPanel />}
-          {sidebarTab === 'forms' && <FormPanel />}
+          {sidebarTab === 'forms' && (
+            <Suspense fallback={<div role="status" aria-live="polite" className="p-4 text-sm text-[var(--color-text-muted)]">Loading…</div>}>
+              <FormPanel />
+            </Suspense>
+          )}
         </div>
       </aside>
     </>

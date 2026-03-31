@@ -4,7 +4,6 @@ import React, {
   useState,
   useCallback,
   useEffect,
-  useRef,
 } from 'react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { useDocStorage } from '../hooks/useDocStorage';
@@ -17,6 +16,7 @@ import {
   savePdfToIdb,
   loadPdfFromIdb,
   deletePdfFromIdb,
+  getUploadedPdfMeta,
 } from '../utils/pdfStorage';
 import type {
   Highlight,
@@ -41,6 +41,28 @@ function fetchBundledPdf(): Promise<File> {
 }
 
 interface AppState {
+  // View / navigation
+  /** Whether the app is showing the home/library screen or the reader. */
+  view: 'home' | 'reader';
+  /** Switch to the home/library screen (keeps any loaded PDF in memory). */
+  goHome: () => void;
+  /** Switch to the reader screen. */
+  openReader: () => void;
+  /** Load and open the bundled IRPG PDF in the reader. */
+  openBuiltinIrpg: () => void;
+  /** Load and open the saved uploaded PDF from IndexedDB in the reader. */
+  openSavedPdf: () => void;
+  /**
+   * Remove the saved uploaded PDF from IndexedDB.
+   * If it was the currently loaded document, clears pdfFile too.
+   */
+  removeSavedPdf: () => void;
+  /**
+   * Filename of the PDF currently stored in IndexedDB, or null if none.
+   * Independent of which PDF is currently loaded – shows what can be reopened.
+   */
+  savedUploadedName: string | null;
+
   // PDF
   pdfFile: File | null;
   setPdfFile: (file: File | null) => void;
@@ -87,20 +109,34 @@ interface AppState {
 
   /** True when a user-uploaded PDF is active (not the bundled irpg.pdf). */
   isUploadedPdf: boolean;
-  /** Clears the stored uploaded PDF from IndexedDB and reverts to the bundled IRPG PDF. */
-  clearUploadedPdf: () => void;
 
   // Navigation
   /** Scrolls to the given page even if currentPage is already set to that value. */
   scrollToPage: (page: number) => void;
   scrollKey: number;
+
+  // Backup / restore
+  /**
+   * Bulk-restores reader state from a previously exported backup.
+   * All fields are optional; only provided values are applied.
+   */
+  restoreDocumentData: (data: {
+    highlights?: Highlight[];
+    bookmarks?: Bookmark[];
+    formValues?: FormValues;
+    currentPage?: number;
+    scale?: number;
+  }) => void;
 }
 
 const AppContext = createContext<AppState | null>(null);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
+  const [view, setView] = useState<'home' | 'reader'>('home');
+  const [savedUploadedName, setSavedUploadedName] = useState<string | null>(null);
+
   const [pdfFile, setPdfFileState] = useState<File | null>(null);
-  const [pdfLoading, setPdfLoading] = useState(true);
+  const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfName, setPdfName] = useState('');
   const [numPages, setNumPages] = useState(0);
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>('toc');
@@ -111,11 +147,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // documentId scopes all per-document storage.  Starts as the bundled PDF's
   // stable ID; changes when the user uploads a different file.
   const [documentId, setDocumentId] = useState<string>(BUILTIN_DOC_ID);
-
-  // Tracks whether the user has explicitly selected a PDF so the async
-  // IndexedDB restore on mount does not overwrite a user-selected file if it
-  // resolves after the user has already uploaded one.
-  const userUploadedRef = useRef(false);
 
   const [theme, setTheme] = useLocalStorage<Theme>('irpg-theme', 'light');
 
@@ -139,19 +170,78 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setTheme((t) => (t === 'light' ? 'dark' : 'light'));
   }, [setTheme]);
 
+  // On first mount: check IndexedDB metadata so the home screen can show
+  // whether a saved PDF is available to reopen, without loading the blob yet.
+  useEffect(() => {
+    getUploadedPdfMeta()
+      .then((meta) => {
+        if (meta) setSavedUploadedName(meta.name);
+      })
+      .catch(() => {}); // IDB unavailable – fine, just won't show saved option
+  }, []); // intentionally empty – runs once on mount
+
+  const goHome = useCallback(() => setView('home'), []);
+  const openReader = useCallback(() => setView('reader'), []);
+
+  /** Load the bundled IRPG PDF and switch to the reader. */
+  const openBuiltinIrpg = useCallback(() => {
+    setPdfLoading(true);
+    fetchBundledPdf()
+      .then((file) => {
+        setPdfFileState(file);
+        setPdfName('irpg.pdf');
+        setDocumentId(BUILTIN_DOC_ID);
+        setNumPages(0);
+        setView('reader');
+      })
+      .catch((err) => console.error('Could not load irpg.pdf:', err))
+      .finally(() => setPdfLoading(false));
+  }, []);
+
+  /** Load the last saved uploaded PDF from IndexedDB and switch to the reader. */
+  const openSavedPdf = useCallback(() => {
+    setPdfLoading(true);
+    loadPdfFromIdb()
+      .then((file) => {
+        if (!file) return;
+        setPdfFileState(file);
+        setPdfName(file.name);
+        setDocumentId(getDocumentId(file));
+        setNumPages(0);
+        setView('reader');
+      })
+      .catch((err) => console.error('Could not load saved PDF:', err))
+      .finally(() => setPdfLoading(false));
+  }, []);
+
+  /**
+   * Remove the saved PDF from IndexedDB.
+   * If it was the currently loaded document, clears pdfFile and returns to
+   * home.  Otherwise just clears the saved name so the home card disappears.
+   */
+  const removeSavedPdf = useCallback(() => {
+    deletePdfFromIdb().catch((err) =>
+      console.error('Could not delete PDF from IndexedDB:', err),
+    );
+    setSavedUploadedName(null);
+    if (documentId !== BUILTIN_DOC_ID) {
+      // The uploaded PDF was the active document – clear it and go home.
+      setPdfFileState(null);
+      setPdfName('');
+      setDocumentId(BUILTIN_DOC_ID);
+      setNumPages(0);
+      setView('home');
+    }
+  }, [documentId]);
+
   const setPdfFile = useCallback((file: File | null) => {
-    // Mark that the user has explicitly selected a file so the async IndexedDB
-    // restore on mount does not overwrite it if it resolves later.
-    if (file) userUploadedRef.current = true;
     setPdfFileState(file);
     setPdfName(file ? file.name : '');
-    // Assign a new documentId so per-document hooks load the correct storage
-    // slot for this file.  The bundled PDF keeps BUILTIN_DOC_ID (see
-    // auto-load effect below).
     setDocumentId(file ? getDocumentId(file) : BUILTIN_DOC_ID);
     setNumPages(0);
-    // Persist the uploaded file in IndexedDB so it can be restored on reload.
     if (file) {
+      // Track the saved name so the home screen knows what's in IDB.
+      setSavedUploadedName(file.name);
       // Warn the user when the file is large enough that some browsers may
       // refuse to store it in IndexedDB (typical quota: 50–150 MB).
       const MB = file.size / (1024 * 1024);
@@ -173,62 +263,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       });
     }
   }, []);
-
-  /** Clears the stored uploaded PDF and reverts to the bundled IRPG PDF. */
-  const clearUploadedPdf = useCallback(() => {
-    deletePdfFromIdb().catch((err) =>
-      console.error('Could not delete PDF from IndexedDB:', err),
-    );
-    setPdfLoading(true);
-    fetchBundledPdf()
-      .then((file) => {
-        setPdfFileState(file);
-        setPdfName('irpg.pdf');
-        setDocumentId(BUILTIN_DOC_ID);
-        setNumPages(0);
-      })
-      .catch((err) => console.error('Could not reload irpg.pdf:', err))
-      .finally(() => setPdfLoading(false));
-  }, []);
-
-  // On first mount: try to restore a previously saved upload from IndexedDB;
-  // fall back to fetching the bundled irpg.pdf if nothing is stored.
-  useEffect(() => {
-    // `cancelled` is set to true when the effect is cleaned up (e.g. on
-    // unmount in StrictMode).  `userUploadedRef` guards against the async
-    // restore overwriting a file the user has already selected before the
-    // IndexedDB read could resolve.
-    let cancelled = false;
-
-    const loadBundled = () =>
-      fetchBundledPdf()
-        .then((file) => {
-          if (cancelled || userUploadedRef.current) return;
-          setPdfFileState(file);
-          setPdfName('irpg.pdf');
-          // documentId stays BUILTIN_DOC_ID (its initial value)
-        })
-        .catch((err) => console.error('Could not auto-load irpg.pdf:', err))
-        .finally(() => { if (!cancelled) setPdfLoading(false); });
-
-    loadPdfFromIdb()
-      .then((savedFile) => {
-        if (cancelled || userUploadedRef.current) return;
-        if (savedFile) {
-          // Restore the previously uploaded PDF with its correct documentId.
-          setPdfFileState(savedFile);
-          setPdfName(savedFile.name);
-          setDocumentId(getDocumentId(savedFile));
-          setNumPages(0);
-          setPdfLoading(false);
-        } else {
-          loadBundled();
-        }
-      })
-      .catch(() => { if (!cancelled) loadBundled(); }); // IDB unavailable – fall back to bundled PDF
-
-    return () => { cancelled = true; };
-  }, []); // intentionally empty – runs once on mount
 
   // Highlights
   const addHighlight = useCallback(
@@ -321,9 +355,33 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [setCurrentPage],
   );
 
+  const restoreDocumentData = useCallback(
+    (data: {
+      highlights?: Highlight[];
+      bookmarks?: Bookmark[];
+      formValues?: FormValues;
+      currentPage?: number;
+      scale?: number;
+    }) => {
+      if (data.highlights !== undefined) setHighlights(data.highlights);
+      if (data.bookmarks !== undefined) setBookmarks(data.bookmarks);
+      if (data.formValues !== undefined) setFormValues(data.formValues);
+      if (data.scale !== undefined) setScale(data.scale);
+      if (data.currentPage !== undefined) scrollToPage(data.currentPage);
+    },
+    [setHighlights, setBookmarks, setFormValues, setScale, scrollToPage],
+  );
+
   return (
     <AppContext.Provider
       value={{
+        view,
+        goHome,
+        openReader,
+        openBuiltinIrpg,
+        openSavedPdf,
+        removeSavedPdf,
+        savedUploadedName,
         pdfFile,
         setPdfFile,
         pdfLoading,
@@ -359,7 +417,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         scrollToPage,
         scrollKey,
         isUploadedPdf: documentId !== BUILTIN_DOC_ID,
-        clearUploadedPdf,
+        restoreDocumentData,
       }}
     >
       {children}

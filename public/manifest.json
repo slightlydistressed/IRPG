@@ -1,7 +1,7 @@
 {
   "name": "IRPG PDF Reader",
   "short_name": "IRPG",
-  "description": "Interactive deployment guide with highlights, bookmarks, and Q&A",
+  "description": "Offline-first PDF reader with highlights, bookmarks, and forms — works without a network connection",
   "theme_color": "#863bff",
   "background_color": "#1e3a5f",
   "display": "standalone",
