@@ -3,6 +3,7 @@ import {
   useState,
   useCallback,
   useEffect,
+  useMemo,
 } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
@@ -16,6 +17,8 @@ import {
   ChevronRight,
   Highlighter,
   Bug,
+  ArrowLeftRight,
+  Maximize2,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { HIGHLIGHT_COLORS } from '../types';
@@ -31,6 +34,12 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL(
 /** Tags that should not trigger keyboard shortcuts (focus is on interactive element) */
 const INTERACTIVE_TAGS = ['INPUT', 'TEXTAREA', 'SELECT', 'A', 'BUTTON'];
 
+/** Fit modes for the PDF viewer */
+type FitMode = 'width' | 'page' | 'actual' | null;
+
+/** Padding (px) subtracted from each side when computing fit scales */
+const FIT_PADDING = 24;
+
 /** How long (ms) a newly created or clicked highlight stays visually focused. */
 const HIGHLIGHT_FOCUS_DURATION_MS = 2000;
 
@@ -39,6 +48,11 @@ const HIGHLIGHT_FOCUS_DURATION_MS = 2000;
  * Only (2 × RENDER_WINDOW + 1) pages are in the DOM at any time.
  */
 const RENDER_WINDOW = 1;
+
+/** Round a scale value to the nearest tenth */
+function roundScale(s: number): number {
+  return Math.round(s * 10) / 10;
+}
 
 /** Walk the DOM to find the page number attribute */
 function getPageFromNode(node: Node | null): number {
@@ -98,6 +112,15 @@ export default function PDFViewer() {
     setDebugTextLayerState(next);
   }, []);
 
+  // Fit mode: 'width' fills container width, 'page' fits entire page in view,
+  // 'actual' uses 100% scale, null means manual zoom (uses `scale` from context).
+  // Defaults to 'width' for a better out-of-the-box desktop experience.
+  const [fitMode, setFitMode] = useState<FitMode>('width');
+  // Natural (scale=1) dimensions of page 1, used to compute fit scales.
+  const [naturalPageSize, setNaturalPageSize] = useState<{ width: number; height: number } | null>(null);
+  // Current container dimensions tracked via ResizeObserver.
+  const [containerSize, setContainerSize] = useState<{ width: number; height: number } | null>(null);
+
   const onDocumentLoadSuccess = useCallback(
     (pdf: PDFDocumentProxy) => {
       setNumPages(pdf.numPages);
@@ -107,6 +130,13 @@ export default function PDFViewer() {
           setPageLabels(labels && labels.length > 0 ? labels : null),
         )
         .catch(() => setPageLabels(null));
+      // Fetch natural (scale=1) dimensions of page 1 for fit-mode calculations.
+      pdf.getPage(1).then((page) => {
+        const vp = page.getViewport({ scale: 1 });
+        setNaturalPageSize({ width: vp.width, height: vp.height });
+      }).catch((err) => {
+        console.warn('[PDFViewer] Could not fetch page dimensions for fit modes:', err);
+      });
     },
     [setNumPages, setPageLabels],
   );
@@ -345,6 +375,41 @@ export default function PDFViewer() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [pdfFile, numPages, currentPage, setCurrentPage]);
 
+  // Track container size via ResizeObserver so fit modes recompute on resize.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry) {
+        setContainerSize({
+          width: entry.contentRect.width,
+          height: entry.contentRect.height,
+        });
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []); // containerRef is stable
+
+  // Compute the scale to actually use for rendering.
+  // In fit modes we derive the scale from container/page dimensions;
+  // in manual mode we use the persisted `scale` from context.
+  const effectiveScale = useMemo(() => {
+    if (!fitMode || !naturalPageSize || !containerSize) return scale;
+    if (fitMode === 'actual') return 1.0;
+    const availableWidth = Math.max(1, containerSize.width - FIT_PADDING * 2);
+    if (fitMode === 'width') {
+      return availableWidth / naturalPageSize.width;
+    }
+    // 'page' – fit the whole page in the visible area
+    const availableHeight = Math.max(1, containerSize.height - FIT_PADDING * 2);
+    return Math.min(
+      availableWidth / naturalPageSize.width,
+      availableHeight / naturalPageSize.height,
+    );
+  }, [fitMode, naturalPageSize, containerSize, scale]);
+
   const commitPageInput = useCallback(() => {
     const parsed = parseInt(pageInputValue, 10);
     if (!isNaN(parsed) && parsed >= 1 && parsed <= numPages) {
@@ -357,6 +422,13 @@ export default function PDFViewer() {
     setPageInputValue(String(currentPage));
     setIsEditingPage(true);
   }, [currentPage]);
+
+  /** Returns className for a fit-mode toggle button, highlighted when active. */
+  const fitBtnClass = useCallback(
+    (mode: FitMode, extra = '') =>
+      `btn-icon${fitMode === mode ? ' text-[var(--color-accent)] bg-[var(--color-accent-subtle)]' : ''}${extra ? ' ' + extra : ''}`,
+    [fitMode],
+  );
 
   if (!pdfFile) {
     if (pdfLoading) {
@@ -445,20 +517,28 @@ export default function PDFViewer() {
         <div className="toolbar-group shrink-0">
           <button
             className="btn-icon"
-            onClick={() => setScale(Math.max(0.5, scale - 0.1))}
-            disabled={scale <= 0.5}
+            onClick={() => {
+              const next = Math.max(0.5, roundScale(effectiveScale - 0.1));
+              setFitMode(null);
+              setScale(next);
+            }}
+            disabled={effectiveScale <= 0.5}
             title="Zoom out"
             aria-label="Zoom out"
           >
             <ZoomOut size={18} />
           </button>
-          <span className="text-sm font-mono text-[var(--color-text)] min-w-[48px] text-center" aria-live="polite" aria-label={`Zoom level ${Math.round(scale * 100)} percent`}>
-            {Math.round(scale * 100)}%
+          <span className="text-sm font-mono text-[var(--color-text)] min-w-[48px] text-center" aria-live="polite" aria-label={`Zoom level ${Math.round(effectiveScale * 100)} percent`}>
+            {Math.round(effectiveScale * 100)}%
           </span>
           <button
             className="btn-icon"
-            onClick={() => setScale(Math.min(3, scale + 0.1))}
-            disabled={scale >= 3}
+            onClick={() => {
+              const next = Math.min(3, roundScale(effectiveScale + 0.1));
+              setFitMode(null);
+              setScale(next);
+            }}
+            disabled={effectiveScale >= 3}
             title="Zoom in"
             aria-label="Zoom in"
           >
@@ -466,11 +546,42 @@ export default function PDFViewer() {
           </button>
           <button
             className="btn-icon"
-            onClick={() => setScale(1.2)}
-            title="Reset zoom"
-            aria-label="Reset zoom"
+            onClick={() => setFitMode('width')}
+            title="Reset to fit width"
+            aria-label="Reset to fit width"
           >
             <RotateCcw size={14} />
+          </button>
+        </div>
+
+        {/* Fit mode buttons – hidden on small mobile screens */}
+        <div className="toolbar-group shrink-0 hidden sm:flex">
+          <button
+            className={fitBtnClass('width')}
+            onClick={() => setFitMode('width')}
+            title="Fit width"
+            aria-label="Fit width"
+            aria-pressed={fitMode === 'width'}
+          >
+            <ArrowLeftRight size={14} />
+          </button>
+          <button
+            className={fitBtnClass('page')}
+            onClick={() => setFitMode('page')}
+            title="Fit page"
+            aria-label="Fit page"
+            aria-pressed={fitMode === 'page'}
+          >
+            <Maximize2 size={14} />
+          </button>
+          <button
+            className={fitBtnClass('actual', 'text-xs font-semibold px-2')}
+            onClick={() => setFitMode('actual')}
+            title="Actual size (100%)"
+            aria-label="Actual size"
+            aria-pressed={fitMode === 'actual'}
+          >
+            1:1
           </button>
         </div>
 
@@ -561,7 +672,7 @@ export default function PDFViewer() {
               >
                 <Page
                   pageNumber={pg}
-                  scale={scale}
+                  scale={effectiveScale}
                   renderTextLayer
                   renderAnnotationLayer
                 />
