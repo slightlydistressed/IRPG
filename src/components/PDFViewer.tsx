@@ -241,14 +241,13 @@ export default function PDFViewer() {
     };
   }, [captureCurrentSelection]);
 
-  const handleHighlight = useCallback((note: string) => {
-    if (!selection) return;
+  const handleHighlight = useCallback((note: string, snapshotted: SelectionState) => {
     const newId = addHighlight({
-      text: selection.text,
-      page: selection.page,
+      text: snapshotted.text,
+      page: snapshotted.page,
       color: chosenColor,
       note,
-      rects: selection.rects,
+      rects: snapshotted.rects,
     });
     // Open the sidebar on the Highlights tab so the user can see the new entry
     setSidebarOpen(true);
@@ -257,7 +256,7 @@ export default function PDFViewer() {
     setSelectedHighlightId(newId);
     window.getSelection()?.removeAllRanges();
     setSelection(null);
-  }, [selection, chosenColor, addHighlight, setSidebarTab, setSidebarOpen, setSelectedHighlightId]);
+  }, [chosenColor, addHighlight, setSidebarTab, setSidebarOpen, setSelectedHighlightId]);
 
   const dismissSelection = useCallback(() => {
     window.getSelection()?.removeAllRanges();
@@ -585,18 +584,14 @@ export default function PDFViewer() {
                       return h.rects!.map((r, i) => (
                         <div
                           key={`${h.id}-${i}`}
-                          className={`absolute transition-opacity ${
-                            isSelected
-                              ? ''
-                              : 'dark:mix-blend-screen mix-blend-multiply'
-                          }`}
+                          className="absolute transition-opacity dark:mix-blend-screen mix-blend-multiply"
                           style={{
                             left: `${r.left * 100}%`,
                             top: `${r.top * 100}%`,
                             width: `${r.width * 100}%`,
                             height: `${r.height * 100}%`,
                             backgroundColor: h.color,
-                            opacity: isSelected ? 0.85 : 0.6,
+                            opacity: isSelected ? 0.5 : 0.3,
                             boxShadow: isSelected
                               ? '0 0 0 2px var(--color-accent)'
                               : undefined,
