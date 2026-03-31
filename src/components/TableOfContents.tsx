@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { BookmarkPlus, BookmarkMinus, ChevronRight, ChevronDown } from 'lucide-react';
+import { pdfjs } from 'react-pdf';
 import { useApp } from '../context/AppContext';
 import type { TOCItem } from '../types';
 
@@ -124,9 +125,8 @@ export default function TableOfContents() {
     }
     setLoading(true);
     try {
-      const { getDocument } = await import('pdfjs-dist');
       const arrayBuffer = await pdfFile.arrayBuffer();
-      const pdf = await getDocument({ data: arrayBuffer }).promise;
+      const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
       const outline = await pdf.getOutline();
 
       if (!outline || outline.length === 0) {
