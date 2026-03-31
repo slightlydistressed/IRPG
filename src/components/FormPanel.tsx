@@ -1,11 +1,29 @@
-import { useState, useCallback } from 'react';
-import { ChevronLeft, ChevronRight, MapPin, Clock, Calendar, Copy, FileDown } from 'lucide-react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import {
+  ChevronLeft,
+  ChevronRight,
+  MapPin,
+  Clock,
+  Calendar,
+  Copy,
+  FileDown,
+  FileText,
+  Mail,
+  Share2,
+  Check,
+} from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { IRPG_FORMS } from '../data/irpgForms';
 import { BUILTIN_DOC_ID } from '../utils/docStorage';
 import {
   copyReaderSessionToClipboard,
   exportReaderSessionDocx,
+  buildFormText,
+  downloadFormTxt,
+  exportFormDocx,
+  exportFormOdt,
+  shareFormViaEmail,
+  shareFormViaTeams,
 } from '../utils/exportUtils';
 import type { FormSchema, FormField, DeviceAction } from '../types';
 
@@ -241,6 +259,7 @@ interface FormRendererProps {
   setFormValue: (key: string, value: string) => void;
   onBack: () => void;
   onJumpToPage: (page: number) => void;
+  pdfName: string;
 }
 
 function FormRenderer({
@@ -249,7 +268,116 @@ function FormRenderer({
   setFormValue,
   onBack,
   onJumpToPage,
+  pdfName,
 }: FormRendererProps) {
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const [copyDone, setCopyDone] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [statusMsg, setStatusMsg] = useState<string | null>(null);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
+  const exportMenuBtnRef = useRef<HTMLButtonElement>(null);
+
+  // Close menu on outside click / Escape
+  useEffect(() => {
+    if (!exportMenuOpen) return;
+    const onPointer = (e: MouseEvent | TouchEvent) => {
+      if (
+        exportMenuRef.current &&
+        !exportMenuRef.current.contains(e.target as Node)
+      ) {
+        setExportMenuOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setExportMenuOpen(false);
+        exportMenuBtnRef.current?.focus();
+      }
+    };
+    document.addEventListener('mousedown', onPointer);
+    document.addEventListener('touchstart', onPointer);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onPointer);
+      document.removeEventListener('touchstart', onPointer);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [exportMenuOpen]);
+
+  const exportPayload = useMemo(
+    () => ({ form, formValues, pdfName }),
+    [form, formValues, pdfName],
+  );
+
+  const handleCopy = useCallback(async () => {
+    const text = buildFormText({ form, formValues, pdfName });
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const el = document.createElement('textarea');
+        el.value = text;
+        el.style.cssText = 'position:fixed;opacity:0;pointer-events:none';
+        document.body.appendChild(el);
+        el.select();
+        document.execCommand('copy');
+        document.body.removeChild(el);
+      }
+      setCopyDone(true);
+      setTimeout(() => setCopyDone(false), 2000);
+    } catch {
+      /* ignore */
+    }
+    setExportMenuOpen(false);
+  }, [form, formValues, pdfName]);
+
+  const handleDownloadTxt = useCallback(async () => {
+    setExportMenuOpen(false);
+    await downloadFormTxt(exportPayload);
+  }, [exportPayload]);
+
+  const handleDownloadDocx = useCallback(async () => {
+    if (exporting) return;
+    setExportMenuOpen(false);
+    setExporting(true);
+    try {
+      await exportFormDocx(exportPayload);
+    } finally {
+      setExporting(false);
+    }
+  }, [exportPayload, exporting]);
+
+  const handleDownloadOdt = useCallback(async () => {
+    if (exporting) return;
+    setExportMenuOpen(false);
+    setExporting(true);
+    try {
+      await exportFormOdt(exportPayload);
+    } finally {
+      setExporting(false);
+    }
+  }, [exportPayload, exporting]);
+
+  const handleEmail = useCallback(() => {
+    shareFormViaEmail(exportPayload);
+    setExportMenuOpen(false);
+  }, [exportPayload]);
+
+  const handleTeams = useCallback(async () => {
+    setExportMenuOpen(false);
+    const result = await shareFormViaTeams(exportPayload);
+    if (result === 'copied') {
+      setStatusMsg('Copied – open Teams and paste');
+      setTimeout(() => setStatusMsg(null), 3000);
+    } else if (result === 'shared') {
+      setStatusMsg('Shared!');
+      setTimeout(() => setStatusMsg(null), 2000);
+    }
+  }, [exportPayload]);
+
+  const menuItemClass =
+    'w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[var(--color-text)] hover:bg-[var(--color-bg-secondary)] transition-colors text-left disabled:opacity-40';
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -275,7 +403,111 @@ function FormRenderer({
             </button>
           )}
         </div>
+
+        {/* Export dropdown */}
+        <div className="relative shrink-0" ref={exportMenuRef}>
+          <button
+            ref={exportMenuBtnRef}
+            className={`btn-icon transition-colors ${
+              copyDone
+                ? 'text-green-500'
+                : 'text-[var(--color-text-muted)] hover:text-[var(--color-accent)]'
+            }`}
+            onClick={() => setExportMenuOpen((v) => !v)}
+            aria-label="Export this form"
+            aria-expanded={exportMenuOpen}
+            aria-haspopup="menu"
+            title="Export this form"
+            disabled={exporting}
+          >
+            {copyDone ? <Check size={15} /> : <FileDown size={15} />}
+          </button>
+
+          {exportMenuOpen && (
+            <div
+              role="menu"
+              className="absolute right-0 top-full mt-1 w-56 rounded-xl bg-[var(--color-bg-elevated)] border border-[var(--color-border)] shadow-lg z-50 py-1 overflow-hidden"
+            >
+              {/* Copy */}
+              <button
+                role="menuitem"
+                className={menuItemClass}
+                onClick={handleCopy}
+              >
+                <Copy size={14} />
+                Copy text
+              </button>
+
+              <div
+                className="h-px bg-[var(--color-border)] my-1 mx-3"
+                role="separator"
+              />
+
+              {/* File downloads */}
+              <button
+                role="menuitem"
+                className={menuItemClass}
+                onClick={handleDownloadTxt}
+              >
+                <FileText size={14} />
+                Save as .txt
+              </button>
+              <button
+                role="menuitem"
+                className={menuItemClass}
+                onClick={handleDownloadDocx}
+                disabled={exporting}
+              >
+                <FileDown size={14} />
+                Save as .docx
+              </button>
+              <button
+                role="menuitem"
+                className={menuItemClass}
+                onClick={handleDownloadOdt}
+                disabled={exporting}
+              >
+                <FileDown size={14} />
+                Save as .odt
+              </button>
+
+              <div
+                className="h-px bg-[var(--color-border)] my-1 mx-3"
+                role="separator"
+              />
+
+              {/* Share actions */}
+              <button
+                role="menuitem"
+                className={menuItemClass}
+                onClick={handleEmail}
+              >
+                <Mail size={14} />
+                Send via Email
+              </button>
+              <button
+                role="menuitem"
+                className={menuItemClass}
+                onClick={handleTeams}
+              >
+                <Share2 size={14} />
+                Share to Teams
+              </button>
+            </div>
+          )}
+        </div>
       </div>
+
+      {/* Status feedback (Teams copy, etc.) */}
+      {statusMsg && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="px-3 py-1.5 text-xs text-[var(--color-accent)] bg-[var(--color-accent-subtle)] border-b border-[var(--color-border)] shrink-0"
+        >
+          {statusMsg}
+        </div>
+      )}
 
       {/* Description */}
       {form.description && (
@@ -457,6 +689,7 @@ export default function FormPanel() {
         setFormValue={setFormValue}
         onBack={() => setSelectedForm(null)}
         onJumpToPage={handleJumpToPage}
+        pdfName={pdfName}
       />
     );
   }

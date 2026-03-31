@@ -339,3 +339,382 @@ export async function exportReaderSessionDocx(
   const baseName = pdfName.replace(/\.pdf$/i, '');
   saveAs(blob, `${baseName}-session.docx`);
 }
+
+// ── Per-form single-form exports ──────────────────────────────────────────
+
+export interface SingleFormExportPayload {
+  form: FormSchema;
+  formValues: FormValues;
+  pdfName: string;
+}
+
+/** Sanitise a form title for use in a file name. */
+function safeFileName(title: string): string {
+  return title.replace(/[/\\?%*:|"<>]/g, '-').trim();
+}
+
+/**
+ * Builds a plain-text export of a single form using a question-and-answer
+ * layout: each label appears on its own line; the filled answer is indented
+ * on the line(s) below it.  Empty text fields are omitted; checkboxes and
+ * checklists always show their full state.
+ */
+export function buildFormText(payload: SingleFormExportPayload): string {
+  const { form, formValues, pdfName } = payload;
+  const lines: string[] = [];
+
+  lines.push(form.title.toUpperCase());
+  if (pdfName) lines.push(`Document: ${pdfName}`);
+  lines.push(`Exported: ${formatDate()}`);
+
+  for (const section of form.sections) {
+    lines.push('');
+    const bar = '─'.repeat(Math.max(0, 44 - section.title.length - 4));
+    lines.push(`─── ${section.title} ${bar}`);
+    lines.push('');
+
+    for (const field of section.fields) {
+      if (field.type === 'checklist' && field.options) {
+        lines.push(field.label);
+        field.options.forEach((opt, idx) => {
+          const checked =
+            formValues[`${form.id}|${field.id}|${idx}`] === 'true';
+          lines.push(`    ${checked ? '☑' : '☐'} ${opt}`);
+        });
+        lines.push('');
+      } else if (field.type === 'checkbox') {
+        const val = formValues[`${form.id}|${field.id}`];
+        lines.push(field.label);
+        lines.push(`    ${val === 'true' ? '☑ Yes' : '☐ No'}`);
+        lines.push('');
+      } else {
+        const val = (formValues[`${form.id}|${field.id}`] ?? '').trim();
+        if (val) {
+          lines.push(field.label);
+          val.split('\n').forEach((line) => lines.push(`    ${line}`));
+          lines.push('');
+        }
+      }
+    }
+  }
+
+  return lines.join('\n');
+}
+
+/** Downloads the form as a plain-text (.txt) file. */
+export async function downloadFormTxt(
+  payload: SingleFormExportPayload,
+): Promise<void> {
+  const { saveAs } = await import('file-saver');
+  const text = buildFormText(payload);
+  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+  saveAs(blob, `${safeFileName(payload.form.title)}.txt`);
+}
+
+/** Downloads the form as a Microsoft Word (.docx) file. */
+export async function exportFormDocx(
+  payload: SingleFormExportPayload,
+): Promise<void> {
+  const [
+    { Document, Paragraph, TextRun, HeadingLevel, AlignmentType, Packer },
+    { saveAs },
+  ] = await Promise.all([import('docx'), import('file-saver')]);
+
+  const { form, formValues, pdfName } = payload;
+  const children: DocxParagraph[] = [];
+
+  // Document header
+  children.push(
+    new Paragraph({
+      text: form.title,
+      heading: HeadingLevel.HEADING_1,
+      alignment: AlignmentType.CENTER,
+    }),
+  );
+  if (pdfName) {
+    children.push(
+      new Paragraph({
+        children: [
+          new TextRun({ text: `Document: ${pdfName}`, italics: true, size: 18 }),
+        ],
+        alignment: AlignmentType.CENTER,
+      }),
+    );
+  }
+  children.push(
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: `Exported: ${formatDate()}`,
+          italics: true,
+          size: 18,
+        }),
+      ],
+      alignment: AlignmentType.CENTER,
+    }),
+    new Paragraph({ text: '' }),
+  );
+
+  for (const section of form.sections) {
+    children.push(
+      new Paragraph({ text: section.title, heading: HeadingLevel.HEADING_2 }),
+    );
+
+    for (const field of section.fields) {
+      if (field.type === 'checklist' && field.options) {
+        children.push(
+          new Paragraph({
+            children: [new TextRun({ text: field.label, bold: true })],
+          }),
+        );
+        field.options.forEach((opt, idx) => {
+          const checked =
+            formValues[`${form.id}|${field.id}|${idx}`] === 'true';
+          children.push(
+            new Paragraph({
+              children: [new TextRun({ text: `${checked ? '☑' : '☐'} ${opt}` })],
+              indent: { left: 360 },
+            }),
+          );
+        });
+        children.push(new Paragraph({ text: '' }));
+      } else if (field.type === 'checkbox') {
+        const val = formValues[`${form.id}|${field.id}`];
+        children.push(
+          new Paragraph({
+            children: [new TextRun({ text: field.label, bold: true })],
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: `${val === 'true' ? '☑ Yes' : '☐ No'}` }),
+            ],
+            indent: { left: 360 },
+          }),
+          new Paragraph({ text: '' }),
+        );
+      } else {
+        const val = (formValues[`${form.id}|${field.id}`] ?? '').trim();
+        if (val) {
+          children.push(
+            new Paragraph({
+              children: [new TextRun({ text: field.label, bold: true })],
+            }),
+          );
+          val.split('\n').forEach((line) =>
+            children.push(
+              new Paragraph({
+                children: [new TextRun({ text: line })],
+                indent: { left: 360 },
+              }),
+            ),
+          );
+          children.push(new Paragraph({ text: '' }));
+        }
+      }
+    }
+  }
+
+  const doc = new Document({ sections: [{ children }] });
+  const blob = await Packer.toBlob(doc);
+  saveAs(blob, `${safeFileName(form.title)}.docx`);
+}
+
+/**
+ * Downloads the form as an OpenDocument Text (.odt) file.
+ * The ODT is generated as a minimal ZIP archive (per the ODF spec) using
+ * JSZip, which is already available as a transitive dependency.
+ */
+export async function exportFormOdt(
+  payload: SingleFormExportPayload,
+): Promise<void> {
+  const [JSZipModule, { saveAs }] = await Promise.all([
+    import('jszip'),
+    import('file-saver'),
+  ]);
+  // JSZip ships as a CJS default export; Vite surfaces it under `.default`.
+  const JSZip = (JSZipModule as unknown as { default: typeof JSZipModule }).default ?? JSZipModule;
+
+  const { form, formValues, pdfName } = payload;
+
+  const esc = (s: string) =>
+    s
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+
+  const bodyParts: string[] = [];
+
+  // Title
+  bodyParts.push(`<text:h text:outline-level="1">${esc(form.title)}</text:h>`);
+  if (pdfName) {
+    bodyParts.push(
+      `<text:p text:style-name="IRPG_Subtitle">${esc(`Document: ${pdfName}`)}</text:p>`,
+    );
+  }
+  bodyParts.push(
+    `<text:p text:style-name="IRPG_Subtitle">${esc(`Exported: ${formatDate()}`)}</text:p>`,
+  );
+  bodyParts.push('<text:p/>');
+
+  for (const section of form.sections) {
+    bodyParts.push(
+      `<text:h text:outline-level="2">${esc(section.title)}</text:h>`,
+    );
+
+    for (const field of section.fields) {
+      if (field.type === 'checklist' && field.options) {
+        bodyParts.push(
+          `<text:p><text:span text:style-name="IRPG_Bold">${esc(field.label)}</text:span></text:p>`,
+        );
+        field.options.forEach((opt, idx) => {
+          const checked =
+            formValues[`${form.id}|${field.id}|${idx}`] === 'true';
+          bodyParts.push(
+            `<text:p text:style-name="IRPG_Answer">${esc(`${checked ? '☑' : '☐'} ${opt}`)}</text:p>`,
+          );
+        });
+        bodyParts.push('<text:p/>');
+      } else if (field.type === 'checkbox') {
+        const val = formValues[`${form.id}|${field.id}`];
+        bodyParts.push(
+          `<text:p><text:span text:style-name="IRPG_Bold">${esc(field.label)}</text:span></text:p>`,
+          `<text:p text:style-name="IRPG_Answer">${esc(val === 'true' ? '☑ Yes' : '☐ No')}</text:p>`,
+          '<text:p/>',
+        );
+      } else {
+        const val = (formValues[`${form.id}|${field.id}`] ?? '').trim();
+        if (val) {
+          bodyParts.push(
+            `<text:p><text:span text:style-name="IRPG_Bold">${esc(field.label)}</text:span></text:p>`,
+          );
+          val.split('\n').forEach((line) =>
+            bodyParts.push(
+              `<text:p text:style-name="IRPG_Answer">${esc(line)}</text:p>`,
+            ),
+          );
+          bodyParts.push('<text:p/>');
+        }
+      }
+    }
+  }
+
+  const contentXml = `<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+  xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0"
+  xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0"
+  office:version="1.3">
+  <office:automatic-styles>
+    <style:style style:name="IRPG_Answer" style:family="paragraph">
+      <style:paragraph-properties fo:margin-left="1.0cm"/>
+    </style:style>
+    <style:style style:name="IRPG_Subtitle" style:family="paragraph">
+      <style:text-properties fo:font-style="italic" fo:font-size="10pt"/>
+    </style:style>
+    <style:style style:name="IRPG_Bold" style:family="text">
+      <style:text-properties fo:font-weight="bold"/>
+    </style:style>
+  </office:automatic-styles>
+  <office:body>
+    <office:text>
+      ${bodyParts.join('\n      ')}
+    </office:text>
+  </office:body>
+</office:document-content>`;
+
+  const manifestXml = `<?xml version="1.0" encoding="UTF-8"?>
+<manifest:manifest
+  xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0"
+  manifest:version="1.3">
+  <manifest:file-entry manifest:full-path="/" manifest:version="1.3"
+    manifest:media-type="application/vnd.oasis.opendocument.text"/>
+  <manifest:file-entry manifest:full-path="content.xml"
+    manifest:media-type="text/xml"/>
+</manifest:manifest>`;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const zip = new (JSZip as unknown as new () => any)();
+  // The mimetype entry MUST be first and stored without compression (ODF spec).
+  zip.file('mimetype', 'application/vnd.oasis.opendocument.text', {
+    compression: 'STORE',
+  });
+  zip.file('META-INF/manifest.xml', manifestXml);
+  zip.file('content.xml', contentXml);
+
+  const blob = await zip.generateAsync({
+    type: 'blob',
+    mimeType: 'application/vnd.oasis.opendocument.text',
+  });
+  saveAs(blob, `${safeFileName(form.title)}.odt`);
+}
+
+/**
+ * Opens the default email client (e.g. Outlook) with a pre-composed message
+ * containing the form export text.
+ */
+export function shareFormViaEmail(payload: SingleFormExportPayload): void {
+  const text = buildFormText(payload);
+  const subject = `${payload.form.title} – IRPG Reader Export`;
+  window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(text)}`;
+}
+
+/**
+ * Shares the form export text via Microsoft Teams.
+ *
+ * On mobile browsers that support the Web Share API the native share sheet
+ * is shown, which includes Teams as a share target.
+ *
+ * On desktop the text is copied to the clipboard and the Teams desktop
+ * app is launched via the `msteams://` protocol with the message
+ * pre-populated.
+ *
+ * Returns:
+ *   'shared'  – Web Share API accepted the share (mobile)
+ *   'copied'  – text was copied to clipboard; Teams may have opened
+ *   'error'   – share was cancelled or failed
+ */
+export async function shareFormViaTeams(
+  payload: SingleFormExportPayload,
+): Promise<'shared' | 'copied' | 'error'> {
+  const text = buildFormText(payload);
+
+  // Mobile: use native Web Share API so the OS share sheet appears
+  // (Teams, WhatsApp, email, etc. are all available as share targets).
+  if (typeof navigator !== 'undefined' && navigator.share) {
+    try {
+      await navigator.share({ title: payload.form.title, text });
+      return 'shared';
+    } catch (err) {
+      if ((err as Error)?.name === 'AbortError') return 'error';
+      // Fall through to clipboard/Teams deep-link on other errors.
+    }
+  }
+
+  // Desktop: write to clipboard then attempt to open the Teams app.
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const el = document.createElement('textarea');
+      el.value = text;
+      el.style.cssText = 'position:fixed;opacity:0;pointer-events:none';
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand('copy');
+      document.body.removeChild(el);
+    }
+  } catch {
+    return 'error';
+  }
+
+  // Open Teams with the first 4 000 chars pre-populated (protocol limit).
+  const msgEncoded = encodeURIComponent(text.slice(0, 4000));
+  window.open(
+    `msteams://teams.microsoft.com/l/chat/0/0?message=${msgEncoded}`,
+    '_blank',
+  );
+
+  return 'copied';
+}

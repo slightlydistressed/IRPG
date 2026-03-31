@@ -12,10 +12,11 @@
   "dependencies": {
     "docx": "^9.6.1",
     "file-saver": "^2.0.5",
+    "jszip": "^3.10.1",
     "lucide-react": "^1.7.0",
+    "pdfjs-dist": "5.4.296",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
-    "pdfjs-dist": "5.4.296",
     "react-pdf": "^10.4.1"
   },
   "devDependencies": {
