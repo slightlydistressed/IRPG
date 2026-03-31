@@ -187,11 +187,10 @@ function FieldRenderer({ formId, field, value, onChange }: FieldRendererProps) {
  * This wrapper resolves the correct value for the FieldRenderer,
  * which for checklist options is keyed by `formId|fieldId|idx`.
  */
-interface ChecklistOptionProps {
+interface ChecklistFieldProps {
   formId: string;
   fieldId: string;
   label: string;
-  index: number;
   options: string[];
   formValues: Record<string, string>;
   setFormValue: (key: string, value: string) => void;
@@ -204,7 +203,7 @@ function ChecklistField({
   options,
   formValues,
   setFormValue,
-}: Omit<ChecklistOptionProps, 'index'>) {
+}: ChecklistFieldProps) {
   return (
     <fieldset className="border-none p-0 m-0">
       <legend className="text-xs font-medium text-[var(--color-text)] mb-1.5">

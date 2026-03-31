@@ -41,7 +41,6 @@ export function migrateGlobalData(): void {
     const pairs: [string, string][] = [
       ['irpg-highlights', docKey(BUILTIN_DOC_ID, 'highlights')],
       ['irpg-bookmarks', docKey(BUILTIN_DOC_ID, 'bookmarks')],
-      ['irpg-qa', docKey(BUILTIN_DOC_ID, 'qa')],
     ];
 
     for (const [oldKey, newKey] of pairs) {

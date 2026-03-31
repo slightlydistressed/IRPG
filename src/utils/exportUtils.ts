@@ -12,8 +12,7 @@
  */
 
 import type { Paragraph as DocxParagraph } from 'docx';
-import type { Highlight, Bookmark, FormValues } from '../types';
-import type { FormSchema } from '../types';
+import type { Highlight, Bookmark, FormValues, FormSchema } from '../types';
 import { HIGHLIGHT_COLORS } from '../types';
 
 // ── Types ─────────────────────────────────────────────────────────────────
