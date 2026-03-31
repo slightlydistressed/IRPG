@@ -32,14 +32,28 @@ function flattenOutline(
   );
 }
 
+/** Maps IRPG (PMS 461) top-level section titles to their CSS-variable accent colour.
+ *  The PDF outline uses ALL-CAPS titles with colour hints in parentheses, so we
+ *  match by uppercased keyword rather than exact string. */
+function getIrpgSectionColorVar(title: string): string | undefined {
+  const t = title.toUpperCase();
+  if (t.includes('OPERATIONAL ENGAGEMENT')) return 'var(--toc-color-operational)';
+  if (t.includes('SPECIFIC HAZARD'))        return 'var(--toc-color-hazards)';
+  if (t.includes('FIRE ENVIRONMENT'))       return 'var(--toc-color-fire)';
+  if (t.includes('ALL HAZARD'))             return 'var(--toc-color-allhazards)';
+  return undefined;
+}
+
 function TOCNode({
   item,
   depth = 0,
   pageLabels,
+  sectionColor,
 }: {
   item: TOCItem;
   depth?: number;
   pageLabels: string[] | null;
+  sectionColor?: string;
 }) {
   const { setCurrentPage, addBookmark, removeBookmark, isBookmarked, bookmarks } =
     useApp();
@@ -49,6 +63,13 @@ function TOCNode({
 
   // Resolve the display label for this item's page (e.g. "i", "A-1" or "42").
   const displayLabel = pageLabels?.[item.page - 1] ?? String(item.page);
+
+  // Depth-0 items that match a known IRPG section title define a colour zone
+  // for all their descendants.  Other items inherit whatever was passed in.
+  const colorForChildren =
+    depth === 0
+      ? (getIrpgSectionColorVar(item.title) ?? sectionColor)
+      : sectionColor;
 
   const handleNavigate = () => {
     setCurrentPage(item.page);
@@ -67,8 +88,12 @@ function TOCNode({
   return (
     <div>
       <div
-        className={`toc-item group flex items-center gap-1 px-2 py-1 rounded cursor-pointer hover:bg-[var(--color-accent)]/10 transition-colors`}
-        style={{ paddingLeft: `${(depth + 1) * 12}px` }}
+        className={`toc-item group flex items-center gap-1 px-2 py-1 rounded-lg cursor-pointer transition-colors ${
+          sectionColor
+            ? 'mx-1.5 mb-0.5 hover:opacity-90'
+            : 'hover:bg-[var(--color-accent)]/10'
+        }`}
+        style={{ paddingLeft: `${(depth + 1) * 12}px`, backgroundColor: sectionColor }}
       >
         {hasChildren ? (
           <button
@@ -110,7 +135,7 @@ function TOCNode({
       {hasChildren && open && (
         <div>
           {item.items!.map((child, i) => (
-            <TOCNode key={i} item={child} depth={depth + 1} pageLabels={pageLabels} />
+            <TOCNode key={i} item={child} depth={depth + 1} pageLabels={pageLabels} sectionColor={colorForChildren} />
           ))}
         </div>
       )}
