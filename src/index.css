@@ -182,6 +182,13 @@ body {
   to   { opacity: 1; }
 }
 
+/* ── Reduce header height on mobile for more PDF space ── */
+@media (max-width: 640px) {
+  :root {
+    --header-height: 48px;
+  }
+}
+
 /* ── Mobile bottom navigation bar ────────────────────── */
 .mobile-nav {
   display: none;
