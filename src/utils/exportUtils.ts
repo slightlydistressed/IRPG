@@ -5,17 +5,13 @@
  *
  * Replaces the former Q&A-specific export.  Functions here work with the
  * current document's filled forms/checklists, highlights, and bookmarks.
+ *
+ * The `docx` and `file-saver` packages are loaded lazily (dynamic import)
+ * inside `exportReaderSessionDocx` so they do not increase the initial
+ * bundle size.
  */
 
-import {
-  Document,
-  Paragraph,
-  TextRun,
-  HeadingLevel,
-  AlignmentType,
-  Packer,
-} from 'docx';
-import { saveAs } from 'file-saver';
+import type { Paragraph as DocxParagraph } from 'docx';
 import type { Highlight, Bookmark, FormValues } from '../types';
 import type { FormSchema } from '../types';
 import { HIGHLIGHT_COLORS } from '../types';
@@ -177,13 +173,22 @@ export async function copyReaderSessionToClipboard(
 /**
  * Exports the reader session as a .docx file with structured sections for
  * filled forms, highlights, and bookmarks.
+ *
+ * `docx` and `file-saver` are loaded on-demand so they are not included in
+ * the initial JS bundle.
  */
 export async function exportReaderSessionDocx(
   payload: ExportPayload,
 ): Promise<void> {
+  // Dynamic imports keep docx out of the initial bundle.
+  const [
+    { Document, Paragraph, TextRun, HeadingLevel, AlignmentType, Packer },
+    { saveAs },
+  ] = await Promise.all([import('docx'), import('file-saver')]);
+
   const { pdfName, forms, formValues, highlights, bookmarks } = payload;
 
-  const children: Paragraph[] = [];
+  const children: DocxParagraph[] = [];
 
   // Title
   children.push(

@@ -122,7 +122,7 @@ export default function Header() {
       if (backup.docId !== documentId) {
         const proceed = window.confirm(
           `This backup is for "${backup.pdfName}" (not the currently open document).\n\n` +
-            `Importing it will overwrite your current data for this document.\n\n` +
+            `Importing it will replace the current document's highlights, bookmarks, and form data with data from that backup.\n\n` +
             `Continue anyway?`,
         );
         if (!proceed) return;
