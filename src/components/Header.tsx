@@ -46,6 +46,7 @@ export default function Header() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const backupInputRef = useRef<HTMLInputElement>(null);
   const moreMenuRef = useRef<HTMLDivElement>(null);
+  const moreMenuBtnRef = useRef<HTMLButtonElement>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
 
@@ -58,7 +59,10 @@ export default function Header() {
       }
     };
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setMoreMenuOpen(false);
+      if (e.key === 'Escape') {
+        setMoreMenuOpen(false);
+        moreMenuBtnRef.current?.focus();
+      }
     };
     document.addEventListener('mousedown', handler);
     document.addEventListener('touchstart', handler);
@@ -283,6 +287,7 @@ export default function Header() {
         {/* ⋮ overflow menu – mobile only */}
         <div className="relative sm:hidden" ref={moreMenuRef}>
           <button
+            ref={moreMenuBtnRef}
             className="btn-icon"
             onClick={() => setMoreMenuOpen((v) => !v)}
             aria-label="More actions"
