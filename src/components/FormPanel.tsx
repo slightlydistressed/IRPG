@@ -22,7 +22,6 @@ import {
   buildFormText,
   downloadFormTxt,
   exportFormDocx,
-  exportFormOdt,
   shareFormViaEmail,
   shareFormViaTeams,
 } from '../utils/exportUtils';
@@ -313,17 +312,6 @@ function FormRenderer({
     }
   }, [exportPayload, exporting]);
 
-  const handleDownloadOdt = useCallback(async () => {
-    if (exporting) return;
-    setExportMenuOpen(false);
-    setExporting(true);
-    try {
-      await exportFormOdt(exportPayload);
-    } finally {
-      setExporting(false);
-    }
-  }, [exportPayload, exporting]);
-
   const handleEmail = useCallback(() => {
     shareFormViaEmail(exportPayload);
     setExportMenuOpen(false);
@@ -427,16 +415,6 @@ function FormRenderer({
                 <FileDown size={14} />
                 Save as .docx
               </button>
-              <button
-                role="menuitem"
-                className={menuItemClass}
-                onClick={handleDownloadOdt}
-                disabled={exporting}
-              >
-                <FileDown size={14} />
-                Save as .odt
-              </button>
-
               <div
                 className="h-px bg-[var(--color-border)] my-1 mx-3"
                 role="separator"
