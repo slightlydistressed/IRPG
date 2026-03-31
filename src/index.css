@@ -265,6 +265,17 @@ body {
   opacity: 0.6;
 }
 
+/* ── Developer: text-layer debug visualisation ────────────
+   Applied when the Bug-icon toolbar toggle is active.
+   Outlines every selectable text span so misaligned or phantom
+   spans are immediately visible against the rendered PDF page.
+   Has no effect when the .pdf-debug-text-layer class is absent. */
+.pdf-debug-text-layer .react-pdf__Page__textContent span {
+  outline: 1px solid rgba(255, 50, 50, 0.65) !important;
+  background: rgba(255, 80, 0, 0.12) !important;
+  mix-blend-mode: normal !important;
+}
+
 /* ── Buttons ──────────────────────────────────────────── */
 .btn-icon {
   display: inline-flex;
