@@ -150,7 +150,8 @@ export default function Sidebar() {
           )}
         </div>
 
-        {/* Desktop resize handle – drag to adjust sidebar width. Hidden on mobile via CSS. */}
+        {/* Desktop resize handle – drag to adjust sidebar width. Hidden on mobile via CSS.
+            Double-click resets to the default width. */}
         <div
           className="sidebar-resize-handle"
           aria-hidden="true"
@@ -158,6 +159,7 @@ export default function Sidebar() {
           onPointerMove={handleResizePointerMove}
           onPointerUp={handleResizePointerUp}
           onPointerCancel={handleResizePointerCancel}
+          onDoubleClick={() => setSidebarWidth(SIDEBAR_DEFAULT_WIDTH)}
         />
       </aside>
     </>

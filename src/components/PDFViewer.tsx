@@ -114,6 +114,10 @@ export default function PDFViewer() {
   // selectedHighlightId scroll can position the view correctly.
   const skipScrollToTopRef = useRef(false);
 
+  // Tracks the latest effectiveScale so the wheel-zoom handler can read it
+  // without being recreated on every scale change.
+  const effectiveScaleRef = useRef(1);
+
   // Debounce timer for the selectionchange fallback (mobile touch handles).
   const selectionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -417,11 +421,35 @@ export default function PDFViewer() {
       } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === 'PageDown') {
         e.preventDefault();
         setCurrentPage(Math.min(numPages, currentPage + step));
+      } else if (e.key === 'Home') {
+        e.preventDefault();
+        setCurrentPage(1);
+      } else if (e.key === 'End') {
+        e.preventDefault();
+        setCurrentPage(numPages);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [pdfFile, numPages, currentPage, setCurrentPage, isSpreadActive]);
+
+  // Ctrl/Cmd + scroll wheel to zoom in or out, matching standard PDF reader
+  // behaviour.  Uses a non-passive listener so we can call preventDefault()
+  // to prevent the browser from zooming the page instead.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const handleWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      const delta = e.deltaY < 0 ? 0.1 : -0.1;
+      const next = Math.max(0.5, Math.min(3, roundScale(effectiveScaleRef.current + delta)));
+      setFitMode(null);
+      setScale(next);
+    };
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    return () => el.removeEventListener('wheel', handleWheel);
+  }, [setFitMode, setScale]); // containerRef is stable; effectiveScaleRef is a ref
 
   // Track container size via ResizeObserver so fit modes recompute on resize.
   // Also capture the initial dimensions immediately on mount so effectiveScale
@@ -466,6 +494,9 @@ export default function PDFViewer() {
       availableHeight / naturalPageSize.height,
     );
   }, [fitMode, naturalPageSize, containerSize, scale, spreadMode]);
+
+  // Keep the ref in sync so the wheel-zoom handler always sees the latest value.
+  effectiveScaleRef.current = effectiveScale;
 
   /**
    * Page groups to render.  Only pages within the render window are included;
@@ -601,6 +632,14 @@ export default function PDFViewer() {
               {isSpreadActive && currentPage + 1 <= numPages
                 ? `${currentPage}–${currentPage + 1} / ${numPages}`
                 : `${currentPage} / ${numPages}`}
+              {/* Show PDF-native page label (e.g. "iii", "A-1") when it differs
+                  from the page index, giving users a clear match to the TOC. */}
+              {!isSpreadActive && (() => {
+                const lbl = pageLabels?.[currentPage - 1];
+                return lbl && lbl !== String(currentPage)
+                  ? <span className="ml-1 opacity-50 text-xs">({lbl})</span>
+                  : null;
+              })()}
             </button>
           )}
           <button
@@ -784,6 +823,8 @@ export default function PDFViewer() {
                       loading={
                         naturalPageSize ? (
                           <div
+                            role="status"
+                            aria-label={`Loading page ${pg}`}
                             style={{
                               width: Math.round(naturalPageSize.width * effectiveScale),
                               height: Math.round(naturalPageSize.height * effectiveScale),
