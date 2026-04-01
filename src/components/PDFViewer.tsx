@@ -467,6 +467,43 @@ export default function PDFViewer() {
     );
   }, [fitMode, naturalPageSize, containerSize, scale, spreadMode]);
 
+  /**
+   * Page groups to render.  Only pages within the render window are included;
+   * pages outside the window are not mounted at all.  Adjacent pages inside the
+   * window are kept in the DOM but hidden (display:none) so navigation to them
+   * is instant.
+   *
+   * Using useMemo avoids recomputing the list on every render.  The loop is
+   * O(RENDER_WINDOW) rather than O(numPages) so large PDFs don't pay a cost
+   * proportional to total page count.
+   */
+  const pageGroups = useMemo((): Array<{ pages: number[]; isVisible: boolean }> => {
+    if (numPages === 0) return [];
+    if (isSpreadActive) {
+      // Keep the current spread ± SPREAD_RENDER_WINDOW adjacent spreads in DOM.
+      const halfWindow = SPREAD_RENDER_WINDOW * 2;
+      const rawStart = currentPage - halfWindow;
+      const rawEnd   = currentPage + halfWindow + 1;
+      // Spreads always start on odd pages; round rawStart down if needed.
+      const firstSpread = Math.max(1, rawStart % 2 === 0 ? rawStart - 1 : rawStart);
+      const lastSpread  = Math.min(numPages, rawEnd);
+      const groups: Array<{ pages: number[]; isVisible: boolean }> = [];
+      for (let i = firstSpread; i <= lastSpread; i += 2) {
+        const pages = i + 1 <= numPages ? [i, i + 1] : [i];
+        groups.push({ pages, isVisible: i === currentPage });
+      }
+      return groups;
+    }
+    // Single-page mode: keep current page ± RENDER_WINDOW pages in DOM.
+    const startPg = Math.max(1, currentPage - RENDER_WINDOW);
+    const endPg   = Math.min(numPages, currentPage + RENDER_WINDOW);
+    const groups: Array<{ pages: number[]; isVisible: boolean }> = [];
+    for (let pg = startPg; pg <= endPg; pg++) {
+      groups.push({ pages: [pg], isVisible: pg === currentPage });
+    }
+    return groups;
+  }, [numPages, currentPage, isSpreadActive]);
+
   const commitPageInput = useCallback(() => {
     const parsed = parseInt(pageInputValue, 10);
     if (!isNaN(parsed) && parsed >= 1 && parsed <= numPages) {
@@ -721,106 +758,95 @@ export default function PDFViewer() {
           }
           className="flex flex-col items-center py-4"
         >
-          {(() => {
-            // Build page groups: in spread mode, pairs [[1,2],[3,4],...];
-            // in single mode, singles [[1],[2],...].  Only groups within the
-            // render window are included so off-screen pages stay out of the DOM.
-            const groups: Array<{ pages: number[]; isVisible: boolean }> = [];
-            if (numPages > 0) {
-              if (isSpreadActive) {
-                for (let i = 1; i <= numPages; i += 2) {
-                  const pages = i + 1 <= numPages ? [i, i + 1] : [i];
-                  // Keep the current spread ± SPREAD_RENDER_WINDOW adjacent spreads in the DOM.
-                  if (Math.abs(i - currentPage) > SPREAD_RENDER_WINDOW * 2) continue;
-                  groups.push({ pages, isVisible: i === currentPage });
-                }
-              } else {
-                for (let pg = 1; pg <= numPages; pg++) {
-                  if (Math.abs(pg - currentPage) > RENDER_WINDOW) continue;
-                  groups.push({ pages: [pg], isVisible: pg === currentPage });
-                }
-              }
-            }
-
-            return groups.map(({ pages, isVisible }) => (
-              <div
-                key={pages[0]}
-                className={pages.length > 1 ? 'flex items-start gap-3' : undefined}
-                style={isVisible ? undefined : { display: 'none' }}
-              >
-                {pages.map((pg) => {
-                  const pageLabel = pageLabels?.[pg - 1] ?? String(pg);
-                  return (
+          {pageGroups.map(({ pages, isVisible }) => (
+            <div
+              key={pages[0]}
+              className={pages.length > 1 ? 'flex items-start gap-3' : undefined}
+              style={isVisible ? undefined : { display: 'none' }}
+            >
+              {pages.map((pg) => {
+                const pageLabel = pageLabels?.[pg - 1] ?? String(pg);
+                return (
+                  <div
+                    key={pg}
+                    ref={(el) => {
+                      if (el) pageRefs.current.set(pg, el);
+                      else pageRefs.current.delete(pg);
+                    }}
+                    data-page-number={pg}
+                    className="shadow-lg relative"
+                  >
+                    <Page
+                      pageNumber={pg}
+                      scale={effectiveScale}
+                      renderTextLayer
+                      renderAnnotationLayer
+                      loading={
+                        naturalPageSize ? (
+                          <div
+                            style={{
+                              width:  Math.round(naturalPageSize.width  * effectiveScale),
+                              height: Math.round(naturalPageSize.height * effectiveScale),
+                              background: 'var(--color-bg-secondary)',
+                            }}
+                          />
+                        ) : undefined
+                      }
+                    />
+                    {/* Highlight overlay layer.
+                        z-index: 1 places this container above the PDF canvas (z-index auto)
+                        but below the text-selection layer (z-index 2) and annotation layer
+                        (z-index 3).  react-pdf__Page has only position:relative (no z-index)
+                        so it does not create a new stacking context, meaning all z-indexes
+                        here compare in the same ancestor context.
+                        Result: highlight color appears as a true background behind the
+                        rendered PDF text — text stays fully readable and selectable. */}
                     <div
-                      key={pg}
-                      ref={(el) => {
-                        if (el) pageRefs.current.set(pg, el);
-                        else pageRefs.current.delete(pg);
-                      }}
-                      data-page-number={pg}
-                      className="shadow-lg relative"
+                      className="absolute inset-0 pointer-events-none"
+                      style={{ zIndex: 1 }}
                     >
-                      <Page
-                        pageNumber={pg}
-                        scale={effectiveScale}
-                        renderTextLayer
-                        renderAnnotationLayer
-                      />
-                      {/* Highlight overlay layer.
-                          z-index: 1 places this container above the PDF canvas (z-index auto)
-                          but below the text-selection layer (z-index 2) and annotation layer
-                          (z-index 3).  react-pdf__Page has only position:relative (no z-index)
-                          so it does not create a new stacking context, meaning all z-indexes
-                          here compare in the same ancestor context.
-                          Result: highlight color appears as a true background behind the
-                          rendered PDF text — text stays fully readable and selectable. */}
-                      <div
-                        className="absolute inset-0 pointer-events-none"
-                        style={{ zIndex: 1 }}
-                      >
-                        {highlights
-                          .filter((h) => h.page === pg && h.rects && h.rects.length > 0)
-                          .flatMap((h) => {
-                            const isSelected = h.id === selectedHighlightId;
-                            return h.rects!.map((r, i) => (
-                              <div
-                                key={`${h.id}-${i}`}
-                                className="absolute transition-opacity dark:mix-blend-screen mix-blend-multiply"
-                                style={{
-                                  left: `${r.left * 100}%`,
-                                  top: `${r.top * 100}%`,
-                                  width: `${r.width * 100}%`,
-                                  height: `${r.height * 100}%`,
-                                  backgroundColor: h.color,
-                                  opacity: isSelected ? 0.5 : 0.3,
-                                  boxShadow: isSelected
-                                    ? '0 0 0 2px var(--color-accent)'
-                                    : undefined,
-                                }}
-                              />
-                            ));
-                          })}
-                      </div>
-                      {/* Static page label badge – helps readers match the on-screen page
-                          to the Table of Contents. Shows the PDF's own page label when the
-                          document defines one (e.g. "i", "A-1"), otherwise the page index. */}
-                      <div
-                        aria-hidden="true"
-                        className="absolute bottom-2 right-2 pointer-events-none select-none text-xs font-mono px-1.5 py-0.5 rounded"
-                        style={{
-                          zIndex: 10,
-                          background: 'rgba(0,0,0,0.4)',
-                          color: 'rgba(255,255,255,0.9)',
-                        }}
-                      >
-                        {pageLabel}
-                      </div>
+                      {highlights
+                        .filter((h) => h.page === pg && h.rects && h.rects.length > 0)
+                        .flatMap((h) => {
+                          const isSelected = h.id === selectedHighlightId;
+                          return h.rects!.map((r, i) => (
+                            <div
+                              key={`${h.id}-${i}`}
+                              className="absolute transition-opacity dark:mix-blend-screen mix-blend-multiply"
+                              style={{
+                                left: `${r.left * 100}%`,
+                                top: `${r.top * 100}%`,
+                                width: `${r.width * 100}%`,
+                                height: `${r.height * 100}%`,
+                                backgroundColor: h.color,
+                                opacity: isSelected ? 0.5 : 0.3,
+                                boxShadow: isSelected
+                                  ? '0 0 0 2px var(--color-accent)'
+                                  : undefined,
+                              }}
+                            />
+                          ));
+                        })}
                     </div>
-                  );
-                })}
-              </div>
-            ));
-          })()}
+                    {/* Static page label badge – helps readers match the on-screen page
+                        to the Table of Contents. Shows the PDF's own page label when the
+                        document defines one (e.g. "i", "A-1"), otherwise the page index. */}
+                    <div
+                      aria-hidden="true"
+                      className="absolute bottom-2 right-2 pointer-events-none select-none text-xs font-mono px-1.5 py-0.5 rounded"
+                      style={{
+                        zIndex: 10,
+                        background: 'rgba(0,0,0,0.4)',
+                        color: 'rgba(255,255,255,0.9)',
+                      }}
+                    >
+                      {pageLabel}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
         </Document>
 
         {/* Floating highlight toolbar – viewport-clamped via HighlightToolbar */}
