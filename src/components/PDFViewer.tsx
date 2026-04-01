@@ -92,8 +92,7 @@ export default function PDFViewer() {
     setScale,
     addHighlight,
     highlights,
-    setSidebarTab,
-    setSidebarOpen,
+    updateHighlightColor,
     scrollKey,
     selectedHighlightId,
     setSelectedHighlightId,
@@ -103,6 +102,12 @@ export default function PDFViewer() {
   const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const [selection, setSelection] = useState<SelectionState | null>(null);
   const [chosenColor, setChosenColor] = useState<string>(HIGHLIGHT_COLORS[0].value);
+  // Live-preview selection (rAF-throttled selectionchange) shown while dragging.
+  const [previewSelection, setPreviewSelection] = useState<SelectionState | null>(null);
+  // ID of the highlight that was just saved – drives the recolor toolbar.
+  const [pendingRecolorId, setPendingRecolorId] = useState<string | null>(null);
+  // rAF handle for throttling live-preview updates.
+  const rafPreviewRef = useRef<number | null>(null);
   const [pageInputValue, setPageInputValue] = useState('');
   const [isEditingPage, setIsEditingPage] = useState(false);
   // Incremented to force a Document remount when the user clicks "Try Again".
@@ -219,31 +224,61 @@ export default function PDFViewer() {
   /**
    * Pointer-up handler on the PDF container.
    *
-   * `pointerup` fires for mouse, touch, and pen input (unlike `mouseup` which
-   * only fires for mouse).  This covers the common desktop/stylus case and
-   * also handles single-tap dismissal (pointer released with empty selection).
+   * Immediately saves the current selection as a highlight (default colour)
+   * then shows the recolor toolbar.  The debounced selectionchange listener
+   * handles the equivalent flow for mobile selection-handle drags.
    */
   const handlePointerUp = useCallback(() => {
+    // Cancel any pending mobile-fallback commit so we don't double-save.
+    if (selectionTimerRef.current !== null) {
+      clearTimeout(selectionTimerRef.current);
+      selectionTimerRef.current = null;
+    }
+    // Clear live preview (committed highlight will render instead).
+    if (rafPreviewRef.current !== null) {
+      cancelAnimationFrame(rafPreviewRef.current);
+      rafPreviewRef.current = null;
+    }
+    setPreviewSelection(null);
+
     const captured = captureCurrentSelection();
     if (captured) {
-      setSelection(captured);
+      const newId = addHighlight({
+        text: captured.text,
+        page: captured.page,
+        color: chosenColor,
+        note: '',
+        rects: captured.rects,
+      });
+      setSelectedHighlightId(newId);
+      setPendingRecolorId(newId);
+      setSelection(captured); // position info for recolor toolbar
+      window.getSelection()?.removeAllRanges();
     } else {
       // Pointer released with no active selection – dismiss any open toolbar.
       setSelection(null);
+      setPendingRecolorId(null);
     }
-  }, [captureCurrentSelection]);
+  }, [captureCurrentSelection, chosenColor, addHighlight, setSelectedHighlightId]);
 
   /**
-   * Debounced `selectionchange` listener.
-   *
-   * On mobile/tablet, the user drags OS-provided text-selection handles to
-   * extend their selection.  During that gesture the browser consumes the
-   * touch stream, so no `pointerup` event reaches our handler.  Listening to
-   * `selectionchange` on the document – debounced so we only act once the
-   * user pauses – fills that gap.
+   * Combined selectionchange listener:
+   *   - rAF-throttled: updates the live preview while the user is dragging.
+   *   - Debounced (350 ms): mobile fallback that commits the highlight once
+   *     the user pauses after dragging OS selection handles (where pointerup
+   *     never fires against our container).
    */
   useEffect(() => {
     const onSelectionChange = () => {
+      // ── Live preview (rAF-throttled) ──
+      if (rafPreviewRef.current !== null) cancelAnimationFrame(rafPreviewRef.current);
+      rafPreviewRef.current = requestAnimationFrame(() => {
+        rafPreviewRef.current = null;
+        const captured = captureCurrentSelection();
+        setPreviewSelection(captured);
+      });
+
+      // ── Mobile commit fallback (debounced 350 ms) ──
       if (selectionTimerRef.current !== null) clearTimeout(selectionTimerRef.current);
       selectionTimerRef.current = setTimeout(() => {
         selectionTimerRef.current = null;
@@ -258,7 +293,20 @@ export default function PDFViewer() {
         if (!anchorEl || !container.contains(anchorEl)) return;
 
         const captured = captureCurrentSelection();
-        if (captured) setSelection(captured);
+        if (!captured) return;
+
+        setPreviewSelection(null);
+        const newId = addHighlight({
+          text: captured.text,
+          page: captured.page,
+          color: chosenColor,
+          note: '',
+          rects: captured.rects,
+        });
+        setSelectedHighlightId(newId);
+        setPendingRecolorId(newId);
+        setSelection(captured);
+        window.getSelection()?.removeAllRanges();
       }, 350);
     };
 
@@ -266,30 +314,41 @@ export default function PDFViewer() {
     return () => {
       document.removeEventListener('selectionchange', onSelectionChange);
       if (selectionTimerRef.current !== null) clearTimeout(selectionTimerRef.current);
+      if (rafPreviewRef.current !== null) cancelAnimationFrame(rafPreviewRef.current);
     };
-  }, [captureCurrentSelection]);
+  }, [captureCurrentSelection, chosenColor, addHighlight, setSelectedHighlightId]);
 
-  const handleHighlight = useCallback((note: string, snapshotted: SelectionState) => {
-    const newId = addHighlight({
-      text: snapshotted.text,
-      page: snapshotted.page,
-      color: chosenColor,
-      note,
-      rects: snapshotted.rects,
-    });
-    // Open the sidebar on the Highlights tab so the user can see the new entry
-    setSidebarOpen(true);
-    setSidebarTab('highlights');
-    // Visually focus the newly created highlight in the overlay
-    setSelectedHighlightId(newId);
-    window.getSelection()?.removeAllRanges();
+  /**
+   * Called when the user picks a colour in the recolor toolbar.
+   * Updates the just-saved highlight and also sets it as the new default.
+   */
+  const handleRecolor = useCallback((color: string) => {
+    if (pendingRecolorId) {
+      updateHighlightColor(pendingRecolorId, color);
+      setChosenColor(color);
+    }
     setSelection(null);
-  }, [chosenColor, addHighlight, setSidebarTab, setSidebarOpen, setSelectedHighlightId]);
+    setPendingRecolorId(null);
+  }, [pendingRecolorId, updateHighlightColor]);
+
+  /**
+   * Called when the user starts a new pointer gesture.
+   * Clears any existing recolor toolbar and live preview so the next
+   * selection starts from a clean state.
+   */
+  const handlePointerDown = useCallback(() => {
+    setSelection(null);
+    setPendingRecolorId(null);
+    setPreviewSelection(null);
+  }, []);
 
   const dismissSelection = useCallback(() => {
     window.getSelection()?.removeAllRanges();
     setSelection(null);
+    setPendingRecolorId(null);
+    setPreviewSelection(null);
   }, []);
+
 
   /**
    * When `selectedHighlightId` is set (either by creating a new highlight or
@@ -723,6 +782,7 @@ export default function PDFViewer() {
       <div
         ref={containerRef}
         className="flex-1 overflow-y-auto pdf-container relative select-text"
+        onPointerDown={handlePointerDown}
         onPointerUp={handlePointerUp}
       >
         <Document
@@ -792,7 +852,7 @@ export default function PDFViewer() {
                         here compare in the same ancestor context.
                         Result: highlight color appears as a true background behind the
                         rendered PDF text — text stays fully readable and selectable. */}
-                    <div
+                     <div
                       className="absolute inset-0 pointer-events-none"
                       style={{ zIndex: 1 }}
                     >
@@ -818,6 +878,22 @@ export default function PDFViewer() {
                             />
                           ));
                         })}
+                      {/* Live preview – shown while the user is actively dragging */}
+                      {previewSelection?.page === pg &&
+                        previewSelection.rects?.map((r, i) => (
+                          <div
+                            key={`preview-${i}`}
+                            className="absolute dark:mix-blend-screen mix-blend-multiply"
+                            style={{
+                              left: `${r.left * 100}%`,
+                              top: `${r.top * 100}%`,
+                              width: `${r.width * 100}%`,
+                              height: `${r.height * 100}%`,
+                              backgroundColor: chosenColor,
+                              opacity: 0.4,
+                            }}
+                          />
+                        ))}
                     </div>
                     {/* Static page label badge – helps readers match the on-screen page
                         to the Table of Contents. Shows the PDF's own page label when the
@@ -840,13 +916,12 @@ export default function PDFViewer() {
           ))}
         </Document>
 
-        {/* Floating highlight toolbar – viewport-clamped via HighlightToolbar */}
-        {selection && (
+        {/* Floating recolor toolbar – shown after a highlight is saved */}
+        {selection && pendingRecolorId && (
           <HighlightToolbar
             selection={selection}
             chosenColor={chosenColor}
-            onColorChange={setChosenColor}
-            onHighlight={handleHighlight}
+            onColorChange={handleRecolor}
             onDismiss={dismissSelection}
             containerRef={containerRef}
           />
