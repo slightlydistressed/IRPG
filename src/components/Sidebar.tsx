@@ -30,6 +30,9 @@ export default function Sidebar() {
       )}
 
       <aside className={`sidebar flex flex-col shrink-0 overflow-hidden${sidebarOpen ? ' sidebar-open' : ''}`}>
+        {/* Drag handle – visual affordance for mobile bottom sheet */}
+        <div className="sheet-drag-handle" aria-hidden="true" />
+
         {/* Tab bar */}
         <div className="flex border-b border-[var(--color-border)] shrink-0" role="tablist">
           {TABS.map(({ id, label, Icon }) => (
