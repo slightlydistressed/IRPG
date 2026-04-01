@@ -679,19 +679,19 @@ export default function PDFViewer() {
             <Maximize2 size={14} />
           </button>
           <button
-            className={fitBtnClass('actual', 'text-xs font-semibold px-2')}
-            onClick={() => setFitMode('actual')}
-            title="Actual size (100%)"
-            aria-label="Actual size"
-            aria-pressed={fitMode === 'actual'}
+            className={`btn-icon text-xs font-semibold px-2${!isSpreadActive ? ' text-[var(--color-accent)] bg-[var(--color-accent-subtle)]' : ''}`}
+            onClick={() => setSpreadMode(false)}
+            title="Single page view"
+            aria-label="Switch to single page view"
+            aria-pressed={!isSpreadActive}
           >
-            1:1
+            1P
           </button>
           <button
             className={`btn-icon text-xs font-semibold px-2${isSpreadActive ? ' text-[var(--color-accent)] bg-[var(--color-accent-subtle)]' : ''}`}
-            onClick={() => setSpreadMode((v) => !v)}
-            title={isSpreadActive ? 'Single page view' : 'Two-page spread'}
-            aria-label={isSpreadActive ? 'Switch to single page view' : 'Switch to two-page spread view'}
+            onClick={() => setSpreadMode(true)}
+            title="Two-page spread"
+            aria-label="Switch to two-page spread view"
             aria-pressed={isSpreadActive}
           >
             2P
