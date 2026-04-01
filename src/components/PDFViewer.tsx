@@ -16,7 +16,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Highlighter,
-  Bug,
   ArrowLeftRight,
   Maximize2,
 } from 'lucide-react';
@@ -740,33 +739,18 @@ export default function PDFViewer() {
             <button
               key={c.value}
               onClick={() => setChosenColor(c.value)}
-              className={`w-5 h-5 rounded-full border-2 transition-transform ${
+              className={`w-6 h-6 rounded-full border-2 transition-transform ${
                 chosenColor === c.value
                   ? 'border-[var(--color-accent)] scale-125'
                   : 'border-transparent hover:scale-110'
               }`}
               style={{ backgroundColor: c.value }}
               title={`Highlight in ${c.label}`}
+              aria-label={`Highlight in ${c.label}`}
+              aria-pressed={chosenColor === c.value}
             />
           ))}
         </div>
-
-        {pdfName && (
-          <span className="ml-auto text-xs text-[var(--color-text-muted)] truncate hidden md:block max-w-xs">
-            {pdfName}
-          </span>
-        )}
-
-        {/* Developer tool: toggle text-layer debug visualisation */}
-        <button
-          className={`btn-icon ml-auto shrink-0 hidden sm:inline-flex${debugTextLayer ? ' text-orange-400' : ''}`}
-          onClick={toggleDebugTextLayer}
-          title={debugTextLayer ? 'Disable text-layer debug (Dev)' : 'Enable text-layer debug (Dev)'}
-          aria-label={debugTextLayer ? 'Disable text-layer debug mode' : 'Enable text-layer debug mode'}
-          aria-pressed={debugTextLayer}
-        >
-          <Bug size={14} />
-        </button>
       </div>
 
       {/* PDF pages */}
