@@ -3,6 +3,7 @@ import {
   useState,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
 } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
@@ -93,7 +94,6 @@ export default function PDFViewer() {
     highlights,
     setSidebarTab,
     setSidebarOpen,
-    pdfName,
     scrollKey,
     selectedHighlightId,
     setSelectedHighlightId,
@@ -122,13 +122,7 @@ export default function PDFViewer() {
 
   // Developer debug: visualise the react-pdf text layer and log selection info.
   // Use a ref so captureCurrentSelection can read the flag without being re-created.
-  const [debugTextLayer, setDebugTextLayerState] = useState(false);
   const debugTextLayerRef = useRef(false);
-  const toggleDebugTextLayer = useCallback(() => {
-    const next = !debugTextLayerRef.current;
-    debugTextLayerRef.current = next;
-    setDebugTextLayerState(next);
-  }, []);
 
   // Fit mode: 'width' fills container width, 'page' fits entire page in view,
   // 'actual' uses 100% scale, null means manual zoom (uses `scale` from context).
@@ -495,7 +489,9 @@ export default function PDFViewer() {
   }, [fitMode, naturalPageSize, containerSize, scale, spreadMode]);
 
   // Keep the ref in sync so the wheel-zoom handler always sees the latest value.
-  effectiveScaleRef.current = effectiveScale;
+  useLayoutEffect(() => {
+    effectiveScaleRef.current = effectiveScale;
+  }, [effectiveScale]);
 
   /**
    * Page groups to render.  Only pages within the render window are included;
@@ -756,7 +752,7 @@ export default function PDFViewer() {
       {/* PDF pages */}
       <div
         ref={containerRef}
-        className={`flex-1 overflow-y-auto pdf-container relative select-text${debugTextLayer ? ' pdf-debug-text-layer' : ''}`}
+        className="flex-1 overflow-y-auto pdf-container relative select-text"
         onPointerUp={handlePointerUp}
       >
         <Document

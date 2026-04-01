@@ -1,5 +1,5 @@
 /* IRPG PDF Reader – Service Worker (offline cache) */
-const CACHE_NAME = 'irpg-cache-v1';
+const CACHE_NAME = 'irpg-cache-v2';
 
 // Derive the base path from the service worker script URL so this file works
 // correctly whether the app is served at the root ('/') or a sub-path like
