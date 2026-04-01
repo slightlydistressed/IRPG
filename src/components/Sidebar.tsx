@@ -1,4 +1,4 @@
-import React, { useRef, useCallback, Suspense, lazy } from 'react';
+import React, { useRef, useCallback, useLayoutEffect, Suspense, lazy } from 'react';
 import { List, Highlighter, ClipboardList } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useLocalStorage } from '../hooks/useLocalStorage';
@@ -36,7 +36,10 @@ export default function Sidebar() {
   // Refs track drag state so the stable callbacks below can always read the
   // latest values without being recreated on every pixel of drag.
   const sidebarWidthRef = useRef(sidebarWidth);
-  sidebarWidthRef.current = sidebarWidth; // keep in sync on every render
+  // Keep the ref in sync so drag handlers always see the latest persisted width.
+  useLayoutEffect(() => {
+    sidebarWidthRef.current = sidebarWidth;
+  }, [sidebarWidth]);
   const startXRef = useRef(0);
   const startWidthRef = useRef(SIDEBAR_DEFAULT_WIDTH);
   // Pending requestAnimationFrame handle – used to batch width updates to one
