@@ -38,7 +38,7 @@
   --toc-color-fire:        #f5a520;   /* orange pages  */
   --toc-color-allhazards:  #e8e4b8;   /* yellow pages  */
   --toc-color-medical:     #fce4e4;   /* red/pink pages*/
-  --toc-color-aviation:    #c5dce8;   /* blue pages    */
+  --toc-color-aviation:    #ccd4f4;   /* blue pages    */
   --toc-color-references:  #f0f0ec;   /* white pages   */
 }
 
@@ -71,7 +71,7 @@
   --toc-color-fire:        #3d2005;
   --toc-color-allhazards:  #2e2c10;
   --toc-color-medical:     #3d1515;
-  --toc-color-aviation:    #0f2030;
+  --toc-color-aviation:    #14143a;
   --toc-color-references:  #1e1e24;
 }
 

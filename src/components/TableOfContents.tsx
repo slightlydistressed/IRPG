@@ -102,43 +102,36 @@ function TOCNode({
     <div>
       {depth === 0 ? (
         /* ── Section heading (depth 0) ─────────────────────────────────── */
-        <div className="mt-3 first:mt-1">
-          <div className={`group flex items-center gap-1 px-3 py-1 cursor-pointer ${hasChildren ? '' : 'hover:bg-[var(--color-accent)]/10 rounded'}`}>
-            {hasChildren ? (
+        <div className="mt-5 first:mt-2">
+          <div
+            className="group flex items-center gap-2 px-4 pb-2 cursor-pointer"
+            onClick={hasChildren ? () => setOpen(!open) : handleNavigate}
+          >
+            {hasChildren && (
               <button
-                onClick={() => setOpen(!open)}
                 className="shrink-0 text-[var(--color-text-muted)]"
                 aria-label={open ? 'Collapse' : 'Expand'}
+                onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
               >
-                {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                {open ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
               </button>
-            ) : (
-              <span className="w-3.5 shrink-0" />
             )}
 
-            <button
-              className="flex-1 text-left text-sm font-bold tracking-wide text-[var(--color-text)] uppercase py-0.5"
-              onClick={handleNavigate}
-              title={`${item.title} – page ${displayLabel}`}
-            >
+            <span className="flex-1 text-2xl font-bold text-[var(--color-text)] leading-tight">
               {cleanSectionTitle(item.title)}
-            </button>
-
-            <span className="text-xs text-[var(--color-text-muted)] shrink-0 mr-1">
-              {displayLabel}
             </span>
 
             <button
-              onClick={handleBookmark}
-              className={`shrink-0 opacity-0 group-hover:opacity-100 transition-opacity ${bookmarked ? '!opacity-100 text-yellow-500' : 'text-[var(--color-text-muted)]'}`}
+              onClick={(e) => { e.stopPropagation(); handleBookmark(e); }}
+              className={`shrink-0 transition-opacity ${bookmarked ? 'text-yellow-500' : 'text-[var(--color-text-muted)] opacity-0 group-hover:opacity-100'}`}
               title={bookmarked ? 'Remove bookmark' : 'Bookmark this section'}
             >
-              {bookmarked ? <BookmarkMinus size={14} /> : <BookmarkPlus size={14} />}
+              {bookmarked ? <BookmarkMinus size={15} /> : <BookmarkPlus size={15} />}
             </button>
           </div>
 
           {hasChildren && open && (
-            <div className="mb-1">
+            <div className="mb-3">
               {item.items!.map((child, i) => (
                 <TOCNode key={i} item={child} depth={depth + 1} pageLabels={pageLabels} sectionColor={colorForChildren} />
               ))}
@@ -146,47 +139,45 @@ function TOCNode({
           )}
         </div>
       ) : (
-        /* ── Regular / colored card item (depth ≥ 1) ───────────────────── */
+        /* ── Colored card item (depth ≥ 1) ─────────────────────────────── */
         <div>
           <div
-            className={`toc-item group flex items-center gap-1 px-2 py-1.5 rounded-lg cursor-pointer transition-colors ${
+            className={`toc-item group flex items-center gap-3 rounded-2xl cursor-pointer transition-colors mx-3 mb-2 px-4 py-3.5 ${
               sectionColor
-                ? 'mx-2 mb-1 hover:opacity-90'
-                : 'hover:bg-[var(--color-accent)]/10'
+                ? 'hover:opacity-90'
+                : 'bg-[var(--color-bg-elevated)] border border-[var(--color-border)] hover:bg-[var(--color-accent)]/10'
             }`}
-            style={{ paddingLeft: `${(depth) * 12 + 8}px`, backgroundColor: sectionColor }}
+            style={sectionColor ? { backgroundColor: sectionColor } : undefined}
           >
-            {hasChildren ? (
+            {hasChildren && (
               <button
-                onClick={() => setOpen(!open)}
+                onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
                 className="shrink-0 text-[var(--color-text-muted)]"
                 aria-label={open ? 'Collapse' : 'Expand'}
               >
                 {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
               </button>
-            ) : (
-              <span className="w-3.5 shrink-0" />
             )}
 
             <button
-              className="flex-1 text-left text-sm leading-snug truncate text-[var(--color-text)] py-0.5"
+              className="flex-1 text-left text-sm leading-snug text-[var(--color-text)] py-0.5"
               onClick={handleNavigate}
               title={`${item.title} – page ${displayLabel}`}
             >
-              {item.title}
+              {item.title} ({displayLabel})
             </button>
-
-            <span className="text-xs text-[var(--color-text-muted)] shrink-0 mr-1">
-              {displayLabel}
-            </span>
 
             <button
               onClick={handleBookmark}
-              className={`shrink-0 opacity-0 group-hover:opacity-100 transition-opacity ${bookmarked ? '!opacity-100 text-yellow-500' : 'text-[var(--color-text-muted)]'}`}
+              className={`shrink-0 transition-opacity ${bookmarked ? 'text-yellow-500' : 'text-[var(--color-text-muted)] opacity-40 group-hover:opacity-100'}`}
               title={bookmarked ? 'Remove bookmark' : 'Bookmark this section'}
             >
-              {bookmarked ? <BookmarkMinus size={14} /> : <BookmarkPlus size={14} />}
+              {bookmarked ? <BookmarkMinus size={15} /> : <BookmarkPlus size={15} />}
             </button>
+
+            {!hasChildren && (
+              <ChevronRight size={15} className="shrink-0 text-[var(--color-text-muted)] opacity-40 group-hover:opacity-100 transition-opacity" aria-hidden />
+            )}
           </div>
 
           {hasChildren && open && (
