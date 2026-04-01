@@ -119,7 +119,7 @@ function TOCNode({
               </button>
             )}
 
-            <span className="flex-1 text-2xl font-bold text-[var(--color-text)] leading-tight">
+            <span className="flex-1 text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)] leading-tight">
               {cleanSectionTitle(item.title)}
             </span>
 
