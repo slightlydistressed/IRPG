@@ -683,7 +683,7 @@ export default function PDFViewer() {
 
         {/* Developer tool: toggle text-layer debug visualisation */}
         <button
-          className={`btn-icon ml-auto shrink-0${debugTextLayer ? ' text-orange-400' : ''}`}
+          className={`btn-icon ml-auto shrink-0 hidden sm:inline-flex${debugTextLayer ? ' text-orange-400' : ''}`}
           onClick={toggleDebugTextLayer}
           title={debugTextLayer ? 'Disable text-layer debug (Dev)' : 'Enable text-layer debug (Dev)'}
           aria-label={debugTextLayer ? 'Disable text-layer debug mode' : 'Enable text-layer debug mode'}

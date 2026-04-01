@@ -142,11 +142,14 @@ export function buildReaderSessionText(payload: ExportPayload): string {
 
 // ── Clipboard copy ─────────────────────────────────────────────────────────
 
-/** Copies the session text to the clipboard. Returns true on success. */
-export async function copyReaderSessionToClipboard(
-  payload: ExportPayload,
-): Promise<boolean> {
-  const text = buildReaderSessionText(payload);
+/**
+ * Copies the given text to the clipboard.
+ * Returns true on success, false on failure.
+ *
+ * Falls back to the legacy `execCommand` approach in non-secure or older
+ * browser contexts where the Clipboard API is unavailable.
+ */
+export async function copyTextToClipboard(text: string): Promise<boolean> {
   try {
     if (navigator.clipboard && window.isSecureContext) {
       await navigator.clipboard.writeText(text);
@@ -165,6 +168,13 @@ export async function copyReaderSessionToClipboard(
   } catch {
     return false;
   }
+}
+
+/** Copies the session text to the clipboard. Returns true on success. */
+export async function copyReaderSessionToClipboard(
+  payload: ExportPayload,
+): Promise<boolean> {
+  return copyTextToClipboard(buildReaderSessionText(payload));
 }
 
 // ── .docx export ──────────────────────────────────────────────────────────
@@ -338,4 +348,239 @@ export async function exportReaderSessionDocx(
   const blob = await Packer.toBlob(doc);
   const baseName = pdfName.replace(/\.pdf$/i, '');
   saveAs(blob, `${baseName}-session.docx`);
+}
+
+// ── Per-form single-form exports ──────────────────────────────────────────
+
+export interface SingleFormExportPayload {
+  form: FormSchema;
+  formValues: FormValues;
+  pdfName: string;
+}
+
+/** Sanitise a form title for use in a file name. */
+function safeFileName(title: string): string {
+  return title.replace(/[/\\?%*:|"<>]/g, '-').trim();
+}
+
+/**
+ * Builds a plain-text export of a single form using a question-and-answer
+ * layout: each label appears on its own line; the filled answer is indented
+ * on the line(s) below it.  Empty text fields are omitted; checkboxes and
+ * checklists always show their full state.
+ */
+export function buildFormText(payload: SingleFormExportPayload): string {
+  const { form, formValues, pdfName } = payload;
+  const lines: string[] = [];
+
+  lines.push(form.title.toUpperCase());
+  if (pdfName) lines.push(`Document: ${pdfName}`);
+  lines.push(`Exported: ${formatDate()}`);
+
+  for (const section of form.sections) {
+    lines.push('');
+    const bar = '─'.repeat(Math.max(0, 44 - section.title.length - 4));
+    lines.push(`─── ${section.title} ${bar}`);
+    lines.push('');
+
+    for (const field of section.fields) {
+      if (field.type === 'checklist' && field.options) {
+        lines.push(field.label);
+        field.options.forEach((opt, idx) => {
+          const checked =
+            formValues[`${form.id}|${field.id}|${idx}`] === 'true';
+          lines.push(`    ${checked ? '☑' : '☐'} ${opt}`);
+        });
+        lines.push('');
+      } else if (field.type === 'checkbox') {
+        const val = formValues[`${form.id}|${field.id}`];
+        lines.push(field.label);
+        lines.push(`    ${val === 'true' ? '☑ Yes' : '☐ No'}`);
+        lines.push('');
+      } else {
+        const val = (formValues[`${form.id}|${field.id}`] ?? '').trim();
+        if (val) {
+          lines.push(field.label);
+          val.split('\n').forEach((line) => lines.push(`    ${line}`));
+          lines.push('');
+        }
+      }
+    }
+  }
+
+  return lines.join('\n');
+}
+
+/** Downloads the form as a plain-text (.txt) file. */
+export async function downloadFormTxt(
+  payload: SingleFormExportPayload,
+): Promise<void> {
+  const { saveAs } = await import('file-saver');
+  const text = buildFormText(payload);
+  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+  saveAs(blob, `${safeFileName(payload.form.title)}.txt`);
+}
+
+/** Downloads the form as a Microsoft Word (.docx) file. */
+export async function exportFormDocx(
+  payload: SingleFormExportPayload,
+): Promise<void> {
+  const [
+    { Document, Paragraph, TextRun, HeadingLevel, AlignmentType, Packer },
+    { saveAs },
+  ] = await Promise.all([import('docx'), import('file-saver')]);
+
+  const { form, formValues, pdfName } = payload;
+  const children: DocxParagraph[] = [];
+
+  // Document header
+  children.push(
+    new Paragraph({
+      text: form.title,
+      heading: HeadingLevel.HEADING_1,
+      alignment: AlignmentType.CENTER,
+    }),
+  );
+  if (pdfName) {
+    children.push(
+      new Paragraph({
+        children: [
+          new TextRun({ text: `Document: ${pdfName}`, italics: true, size: 18 }),
+        ],
+        alignment: AlignmentType.CENTER,
+      }),
+    );
+  }
+  children.push(
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: `Exported: ${formatDate()}`,
+          italics: true,
+          size: 18,
+        }),
+      ],
+      alignment: AlignmentType.CENTER,
+    }),
+    new Paragraph({ text: '' }),
+  );
+
+  for (const section of form.sections) {
+    children.push(
+      new Paragraph({ text: section.title, heading: HeadingLevel.HEADING_2 }),
+    );
+
+    for (const field of section.fields) {
+      if (field.type === 'checklist' && field.options) {
+        children.push(
+          new Paragraph({
+            children: [new TextRun({ text: field.label, bold: true })],
+          }),
+        );
+        field.options.forEach((opt, idx) => {
+          const checked =
+            formValues[`${form.id}|${field.id}|${idx}`] === 'true';
+          children.push(
+            new Paragraph({
+              children: [new TextRun({ text: `${checked ? '☑' : '☐'} ${opt}` })],
+              indent: { left: 360 },
+            }),
+          );
+        });
+        children.push(new Paragraph({ text: '' }));
+      } else if (field.type === 'checkbox') {
+        const val = formValues[`${form.id}|${field.id}`];
+        children.push(
+          new Paragraph({
+            children: [new TextRun({ text: field.label, bold: true })],
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: `${val === 'true' ? '☑ Yes' : '☐ No'}` }),
+            ],
+            indent: { left: 360 },
+          }),
+          new Paragraph({ text: '' }),
+        );
+      } else {
+        const val = (formValues[`${form.id}|${field.id}`] ?? '').trim();
+        if (val) {
+          children.push(
+            new Paragraph({
+              children: [new TextRun({ text: field.label, bold: true })],
+            }),
+          );
+          val.split('\n').forEach((line) =>
+            children.push(
+              new Paragraph({
+                children: [new TextRun({ text: line })],
+                indent: { left: 360 },
+              }),
+            ),
+          );
+          children.push(new Paragraph({ text: '' }));
+        }
+      }
+    }
+  }
+
+  const doc = new Document({ sections: [{ children }] });
+  const blob = await Packer.toBlob(doc);
+  saveAs(blob, `${safeFileName(form.title)}.docx`);
+}
+
+/**
+ * Opens the default email client (e.g. Outlook) with a pre-composed message
+ * containing the form export text.
+ */
+export function shareFormViaEmail(payload: SingleFormExportPayload): void {
+  const text = buildFormText(payload);
+  const subject = `${payload.form.title} – IRPG Reader Export`;
+  window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(text)}`;
+}
+
+/**
+ * Shares the form export text via Microsoft Teams.
+ *
+ * On mobile browsers that support the Web Share API the native share sheet
+ * is shown, which includes Teams as a share target.
+ *
+ * On desktop the text is copied to the clipboard and the Teams desktop
+ * app is launched via the `msteams://` protocol with the message
+ * pre-populated.
+ *
+ * Returns:
+ *   'shared'  – Web Share API accepted the share (mobile)
+ *   'copied'  – text was copied to clipboard; Teams may have opened
+ *   'error'   – share was cancelled or failed
+ */
+export async function shareFormViaTeams(
+  payload: SingleFormExportPayload,
+): Promise<'shared' | 'copied' | 'error'> {
+  const text = buildFormText(payload);
+
+  // Mobile: use native Web Share API so the OS share sheet appears
+  // (Teams, WhatsApp, email, etc. are all available as share targets).
+  if (typeof navigator !== 'undefined' && navigator.share) {
+    try {
+      await navigator.share({ title: payload.form.title, text });
+      return 'shared';
+    } catch (err) {
+      if ((err as Error)?.name === 'AbortError') return 'error';
+      // Fall through to clipboard/Teams deep-link on other errors.
+    }
+  }
+
+  // Desktop: write to clipboard then attempt to open the Teams app.
+  const copied = await copyTextToClipboard(text);
+  if (!copied) return 'error';
+
+  // Open Teams with the first 4 000 chars pre-populated (protocol limit).
+  const msgEncoded = encodeURIComponent(text.slice(0, 4000));
+  window.open(
+    `msteams://teams.microsoft.com/l/chat/0/0?message=${msgEncoded}`,
+    '_blank',
+  );
+
+  return 'copied';
 }

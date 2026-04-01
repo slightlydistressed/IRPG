@@ -31,6 +31,15 @@
   --shadow-sm: 0 2px 6px rgba(15, 23, 42, 0.08), 0 1px 3px rgba(15, 23, 42, 0.05);
   --shadow-md: 0 4px 16px rgba(15, 23, 42, 0.12), 0 2px 6px rgba(15, 23, 42, 0.06);
   --shadow-lg: 0 8px 32px rgba(15, 23, 42, 0.16), 0 4px 12px rgba(15, 23, 42, 0.08);
+
+  /* TOC section accent colors (IRPG PMS 461) */
+  --toc-color-operational: #b8d8b8;   /* green pages   */
+  --toc-color-hazards:     #e2e2e5;   /* gray pages    */
+  --toc-color-fire:        #f5a520;   /* orange pages  */
+  --toc-color-allhazards:  #e8e4b8;   /* yellow pages  */
+  --toc-color-medical:     #fce4e4;   /* red/pink pages*/
+  --toc-color-aviation:    #ccd4f4;   /* blue pages    */
+  --toc-color-references:  #f0f0ec;   /* white pages   */
 }
 
 .dark {
@@ -55,6 +64,15 @@
   --shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.35), 0 1px 3px rgba(0, 0, 0, 0.25);
   --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.3);
   --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.55), 0 4px 12px rgba(0, 0, 0, 0.35);
+
+  /* TOC section accent colors – muted dark-mode variants */
+  --toc-color-operational: #1c3d20;
+  --toc-color-hazards:     #252830;
+  --toc-color-fire:        #3d2005;
+  --toc-color-allhazards:  #2e2c10;
+  --toc-color-medical:     #3d1515;
+  --toc-color-aviation:    #14143a;
+  --toc-color-references:  #1e1e24;
 }
 
 /* ── Base ─────────────────────────────────────────────── */
@@ -180,6 +198,13 @@ body {
 @keyframes sidebar-fade-in {
   from { opacity: 0; }
   to   { opacity: 1; }
+}
+
+/* ── Reduce header height on mobile for more PDF space ── */
+@media (max-width: 640px) {
+  :root {
+    --header-height: 48px;
+  }
 }
 
 /* ── Mobile bottom navigation bar ────────────────────── */

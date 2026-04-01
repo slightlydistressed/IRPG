@@ -10,6 +10,7 @@ import {
   LayoutGrid,
   Download,
   FolderOpen,
+  MoreVertical,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import {
@@ -18,6 +19,7 @@ import {
   parseDocBackup,
   readFileAsText,
 } from '../utils/backupUtils';
+import { useOutsideClick } from '../hooks/useOutsideClick';
 
 export default function Header() {
   const {
@@ -44,7 +46,13 @@ export default function Header() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const backupInputRef = useRef<HTMLInputElement>(null);
+  const moreMenuRef = useRef<HTMLDivElement>(null);
+  const moreMenuBtnRef = useRef<HTMLButtonElement>(null);
   const [importError, setImportError] = useState<string | null>(null);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+
+  const closeMoreMenu = useCallback(() => setMoreMenuOpen(false), []);
+  useOutsideClick(moreMenuRef, moreMenuOpen, closeMoreMenu, moreMenuBtnRef);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -160,7 +168,7 @@ export default function Header() {
 
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}
-          className="btn-icon"
+          className="btn-icon hidden sm:inline-flex"
           title={sidebarOpen ? 'Close sidebar' : 'Open sidebar'}
           aria-label="Toggle sidebar"
         >
@@ -195,7 +203,7 @@ export default function Header() {
         {pdfName && numPages > 0 && (
           <button
             onClick={handleBookmarkCurrent}
-            className={`btn-icon ${isBookmarked(currentPage) ? 'text-yellow-300' : ''}`}
+            className={`btn-icon hidden sm:inline-flex ${isBookmarked(currentPage) ? 'text-yellow-300' : ''}`}
             title={
               isBookmarked(currentPage)
                 ? 'Remove bookmark from current page'
@@ -216,7 +224,7 @@ export default function Header() {
         {pdfName && (
           <button
             onClick={handleExportBackup}
-            className="btn-icon"
+            className="btn-icon hidden sm:inline-flex"
             title="Export backup for this document"
             aria-label="Export backup for this document"
           >
@@ -228,7 +236,7 @@ export default function Header() {
         {pdfName && (
           <button
             onClick={() => backupInputRef.current?.click()}
-            className="btn-icon"
+            className="btn-icon hidden sm:inline-flex"
             title="Import backup for this document"
             aria-label="Import backup for this document"
           >
@@ -255,6 +263,69 @@ export default function Header() {
             {importError}
           </span>
         )}
+
+        {/* ⋮ overflow menu – mobile only */}
+        <div className="relative sm:hidden" ref={moreMenuRef}>
+          <button
+            ref={moreMenuBtnRef}
+            className="btn-icon"
+            onClick={() => setMoreMenuOpen((v) => !v)}
+            aria-label="More actions"
+            aria-expanded={moreMenuOpen}
+            aria-haspopup="menu"
+          >
+            <MoreVertical size={20} />
+          </button>
+          {moreMenuOpen && (
+            <div
+              role="menu"
+              className="absolute right-0 top-full mt-1 w-52 rounded-xl bg-[var(--color-bg-elevated)] border border-[var(--color-border)] shadow-lg z-50 py-1 overflow-hidden"
+            >
+              {pdfName && numPages > 0 && (
+                <button
+                  role="menuitem"
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[var(--color-text)] hover:bg-[var(--color-bg-secondary)] transition-colors text-left"
+                  onClick={() => {
+                    handleBookmarkCurrent();
+                    setMoreMenuOpen(false);
+                  }}
+                >
+                  <BookmarkCheck
+                    size={16}
+                    className={isBookmarked(currentPage) ? 'text-yellow-400' : ''}
+                  />
+                  {isBookmarked(currentPage) ? 'Remove bookmark' : 'Bookmark page'}
+                </button>
+              )}
+              {pdfName && (
+                <button
+                  role="menuitem"
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[var(--color-text)] hover:bg-[var(--color-bg-secondary)] transition-colors text-left"
+                  onClick={() => {
+                    handleExportBackup();
+                    setMoreMenuOpen(false);
+                  }}
+                >
+                  <Download size={16} />
+                  Export backup
+                </button>
+              )}
+              {pdfName && (
+                <button
+                  role="menuitem"
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[var(--color-text)] hover:bg-[var(--color-bg-secondary)] transition-colors text-left"
+                  onClick={() => {
+                    backupInputRef.current?.click();
+                    setMoreMenuOpen(false);
+                  }}
+                >
+                  <FolderOpen size={16} />
+                  Import backup
+                </button>
+              )}
+            </div>
+          )}
+        </div>
 
         <button
           onClick={() => fileInputRef.current?.click()}

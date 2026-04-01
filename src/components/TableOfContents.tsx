@@ -32,14 +32,41 @@ function flattenOutline(
   );
 }
 
+/** Maps IRPG (PMS 461) top-level section titles to their CSS-variable accent colour.
+ *  The PDF outline uses ALL-CAPS titles with colour hints in parentheses, so we
+ *  match by uppercased keyword rather than exact string. */
+function getIrpgSectionColorVar(title: string): string | undefined {
+  const t = title.toUpperCase();
+  if (t.includes('OPERATIONAL ENGAGEMENT')) return 'var(--toc-color-operational)';
+  if (t.includes('SPECIFIC HAZARD'))        return 'var(--toc-color-hazards)';
+  if (t.includes('FIRE ENVIRONMENT'))       return 'var(--toc-color-fire)';
+  if (t.includes('ALL HAZARD'))             return 'var(--toc-color-allhazards)';
+  if (t.includes('EMERGENCY MEDICAL'))      return 'var(--toc-color-medical)';
+  if (t.includes('AVIATION'))              return 'var(--toc-color-aviation)';
+  if (t.includes('OTHER REFERENCE'))       return 'var(--toc-color-references)';
+  return undefined;
+}
+
+/** Strips the "(... pages)" annotation from IRPG section headings and
+ *  converts ALL-CAPS titles to Title Case for a cleaner display. */
+function cleanSectionTitle(title: string): string {
+  const stripped = title.replace(/\s*\([^)]*pages\)/i, '').trim();
+  if (stripped === stripped.toUpperCase() && stripped.length > 1) {
+    return stripped.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+  }
+  return stripped;
+}
+
 function TOCNode({
   item,
   depth = 0,
   pageLabels,
+  sectionColor,
 }: {
   item: TOCItem;
   depth?: number;
   pageLabels: string[] | null;
+  sectionColor?: string;
 }) {
   const { setCurrentPage, addBookmark, removeBookmark, isBookmarked, bookmarks } =
     useApp();
@@ -49,6 +76,13 @@ function TOCNode({
 
   // Resolve the display label for this item's page (e.g. "i", "A-1" or "42").
   const displayLabel = pageLabels?.[item.page - 1] ?? String(item.page);
+
+  // Depth-0 items that match a known IRPG section title define a colour zone
+  // for all their descendants.  Other items inherit whatever was passed in.
+  const colorForChildren =
+    depth === 0
+      ? (getIrpgSectionColorVar(item.title) ?? sectionColor)
+      : sectionColor;
 
   const handleNavigate = () => {
     setCurrentPage(item.page);
@@ -66,52 +100,93 @@ function TOCNode({
 
   return (
     <div>
-      <div
-        className={`toc-item group flex items-center gap-1 px-2 py-1 rounded cursor-pointer hover:bg-[var(--color-accent)]/10 transition-colors`}
-        style={{ paddingLeft: `${(depth + 1) * 12}px` }}
-      >
-        {hasChildren ? (
-          <button
-            onClick={() => setOpen(!open)}
-            className="shrink-0 text-[var(--color-text-muted)]"
-            aria-label={open ? 'Collapse' : 'Expand'}
+      {depth === 0 ? (
+        /* ── Section heading (depth 0) ─────────────────────────────────── */
+        <div className="mt-5 first:mt-2">
+          <div
+            className="group flex items-center gap-2 px-4 pb-2 cursor-pointer"
+            onClick={hasChildren ? () => setOpen(!open) : handleNavigate}
           >
-            {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-          </button>
-        ) : (
-          <span className="w-3.5 shrink-0" />
-        )}
+            {hasChildren && (
+              <button
+                className="shrink-0 text-[var(--color-text-muted)]"
+                aria-label={open ? 'Collapse' : 'Expand'}
+                onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
+              >
+                {open ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+              </button>
+            )}
 
-        <button
-          className="flex-1 text-left text-sm leading-snug truncate text-[var(--color-text)] py-0.5"
-          onClick={handleNavigate}
-          title={`${item.title} – page ${displayLabel}`}
-        >
-          {item.title}
-        </button>
+            <span className="flex-1 text-2xl font-bold text-[var(--color-text)] leading-tight">
+              {cleanSectionTitle(item.title)}
+            </span>
 
-        <span className="text-xs text-[var(--color-text-muted)] shrink-0 mr-1">
-          {displayLabel}
-        </span>
+            <button
+              onClick={(e) => { e.stopPropagation(); handleBookmark(e); }}
+              className={`shrink-0 transition-opacity ${bookmarked ? 'text-yellow-500' : 'text-[var(--color-text-muted)] opacity-0 group-hover:opacity-100'}`}
+              title={bookmarked ? 'Remove bookmark' : 'Bookmark this section'}
+            >
+              {bookmarked ? <BookmarkMinus size={15} /> : <BookmarkPlus size={15} />}
+            </button>
+          </div>
 
-        <button
-          onClick={handleBookmark}
-          className={`shrink-0 opacity-0 group-hover:opacity-100 transition-opacity ${bookmarked ? '!opacity-100 text-yellow-500' : 'text-[var(--color-text-muted)]'}`}
-          title={bookmarked ? 'Remove bookmark' : 'Bookmark this section'}
-        >
-          {bookmarked ? (
-            <BookmarkMinus size={14} />
-          ) : (
-            <BookmarkPlus size={14} />
+          {hasChildren && open && (
+            <div className="mb-3">
+              {item.items!.map((child, i) => (
+                <TOCNode key={i} item={child} depth={depth + 1} pageLabels={pageLabels} sectionColor={colorForChildren} />
+              ))}
+            </div>
           )}
-        </button>
-      </div>
-
-      {hasChildren && open && (
+        </div>
+      ) : (
+        /* ── Colored card item (depth ≥ 1) ─────────────────────────────── */
         <div>
-          {item.items!.map((child, i) => (
-            <TOCNode key={i} item={child} depth={depth + 1} pageLabels={pageLabels} />
-          ))}
+          <div
+            className={`toc-item group flex items-center gap-3 rounded-2xl cursor-pointer transition-colors mx-3 mb-2 px-4 py-3.5 ${
+              sectionColor
+                ? 'hover:opacity-90'
+                : 'bg-[var(--color-bg-elevated)] border border-[var(--color-border)] hover:bg-[var(--color-accent)]/10'
+            }`}
+            style={sectionColor ? { backgroundColor: sectionColor } : undefined}
+          >
+            {hasChildren && (
+              <button
+                onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
+                className="shrink-0 text-[var(--color-text-muted)]"
+                aria-label={open ? 'Collapse' : 'Expand'}
+              >
+                {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              </button>
+            )}
+
+            <button
+              className="flex-1 text-left text-sm leading-snug text-[var(--color-text)] py-0.5"
+              onClick={handleNavigate}
+              title={`${item.title} – page ${displayLabel}`}
+            >
+              {item.title} ({displayLabel})
+            </button>
+
+            <button
+              onClick={handleBookmark}
+              className={`shrink-0 transition-opacity ${bookmarked ? 'text-yellow-500' : 'text-[var(--color-text-muted)] opacity-40 group-hover:opacity-100'}`}
+              title={bookmarked ? 'Remove bookmark' : 'Bookmark this section'}
+            >
+              {bookmarked ? <BookmarkMinus size={15} /> : <BookmarkPlus size={15} />}
+            </button>
+
+            {!hasChildren && (
+              <ChevronRight size={15} className="shrink-0 text-[var(--color-text-muted)] opacity-40 group-hover:opacity-100 transition-opacity" aria-hidden />
+            )}
+          </div>
+
+          {hasChildren && open && (
+            <div>
+              {item.items!.map((child, i) => (
+                <TOCNode key={i} item={child} depth={depth + 1} pageLabels={pageLabels} sectionColor={colorForChildren} />
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
