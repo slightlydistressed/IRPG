@@ -68,7 +68,7 @@ function TOCNode({
   pageLabels: string[] | null;
   sectionColor?: string;
 }) {
-  const { setCurrentPage, addBookmark, removeBookmark, isBookmarked, bookmarks } =
+  const { setCurrentPage, addBookmark, removeBookmark, isBookmarked, bookmarks, setSidebarOpen } =
     useApp();
   const [open, setOpen] = useState(depth < 1);
   const hasChildren = item.items && item.items.length > 0;
@@ -86,6 +86,8 @@ function TOCNode({
 
   const handleNavigate = () => {
     setCurrentPage(item.page);
+    // On mobile (bottom-sheet), close the sidebar so the PDF is immediately visible.
+    if (window.innerWidth < 640) setSidebarOpen(false);
   };
 
   const handleBookmark = (e: React.MouseEvent) => {
