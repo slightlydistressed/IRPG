@@ -785,7 +785,7 @@ export default function PDFViewer() {
                         naturalPageSize ? (
                           <div
                             style={{
-                              width:  Math.round(naturalPageSize.width  * effectiveScale),
+                              width: Math.round(naturalPageSize.width * effectiveScale),
                               height: Math.round(naturalPageSize.height * effectiveScale),
                               background: 'var(--color-bg-secondary)',
                             }}

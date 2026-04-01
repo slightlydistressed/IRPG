@@ -140,16 +140,18 @@ body {
 
 /* ── Sidebar ──────────────────────────────────────────── */
 .sidebar {
-  width: 288px;
-  min-width: 288px;
-  max-width: 288px;
   background-color: var(--color-sidebar-bg);
   border-right: 1px solid var(--color-border);
+  position: relative; /* contains the absolutely-positioned resize handle */
   /* flex-col and overflow-hidden are applied via Tailwind classes on the element */
 }
 
-/* Desktop: remove from layout when closed */
+/* Desktop: use the user-set width (CSS var set by Sidebar.tsx) and hide when closed */
 @media (min-width: 641px) {
+  .sidebar {
+    width: var(--sidebar-width-desktop, 288px);
+  }
+
   .sidebar:not(.sidebar-open) {
     display: none;
   }
@@ -274,6 +276,42 @@ body {
     height: 4px;
     border-radius: 2px;
     background-color: var(--color-border-strong);
+  }
+}
+
+/* ── Sidebar resize handle (desktop only) ─────────────── */
+.sidebar-resize-handle {
+  display: none; /* hidden on mobile */
+}
+
+@media (min-width: 641px) {
+  .sidebar-resize-handle {
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 6px;
+    cursor: col-resize;
+    z-index: 10;
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
+  }
+
+  /* Thin visual indicator that becomes visible on hover */
+  .sidebar-resize-handle::after {
+    content: '';
+    width: 2px;
+    height: 100%;
+    border-radius: 1px;
+    background-color: transparent;
+    transition: background-color 0.15s;
+  }
+
+  .sidebar-resize-handle:hover::after,
+  .sidebar-resize-handle:active::after {
+    background-color: var(--color-accent);
+    opacity: 0.6;
   }
 }
 
