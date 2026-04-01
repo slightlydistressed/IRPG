@@ -57,12 +57,15 @@ self.addEventListener('fetch', (event) => {
           });
           return response;
         })
-        .catch(() => {
-          // Offline fallback: return cached index.html for navigation requests
+        .catch(async () => {
+          // Offline fallback: return cached index.html for navigation requests.
+          // Guard against caches.match returning undefined (cache miss), which
+          // would pass undefined to respondWith and throw a TypeError in the browser.
           if (event.request.mode === 'navigate') {
-            return caches.match(BASE_PATH + '/index.html');
+            const cached = await caches.match(BASE_PATH + '/index.html');
+            if (cached) return cached;
           }
-          return new Response('Offline', { status: 503 });
+          return new Response('Offline', { status: 503, statusText: 'Service Unavailable' });
         });
     }),
   );
