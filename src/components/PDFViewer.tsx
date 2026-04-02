@@ -126,10 +126,7 @@ export default function PDFViewer() {
   // Debounce timer for the selectionchange fallback (mobile touch handles).
   const selectionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Always use fit-width. This const is kept so the effectiveScale fallback
-  // (when naturalPageSize or containerSize is not yet available) uses `scale`
-  // from context as a reasonable initial value.
-  // Natural (scale=1) dimensions of page 1, used to compute fit scales.
+  // Natural (scale=1) dimensions of page 1, used to compute fit-width scale.
   const [naturalPageSize, setNaturalPageSize] = useState<{ width: number; height: number } | null>(null);
   // Current container dimensions tracked via ResizeObserver.
   const [containerSize, setContainerSize] = useState<{ width: number; height: number } | null>(null);
