@@ -422,16 +422,23 @@ body {
   background-color: #525659;
 }
 
-.react-pdf__Page {
-  line-height: 1;
-}
+/* Do not set line-height on .react-pdf__Page – PDF.js already applies
+   line-height:1 directly on the text layer and relies on it for span
+   placement.  Any override here propagates into font-metric calculations
+   and can shift the selectable text layer away from the visible glyphs. */
 
+/* Enable selection on the text layer.  PDF.js positions transparent spans
+   absolutely over the rendered canvas; without user-select:text those spans
+   are invisible to the browser's selection engine. */
 .react-pdf__Page__textContent {
   user-select: text;
 }
 
-/* Ensure react-pdf text layer marks are visible */
+/* PDF.js search-result marks sit inside the text content layer.  Give them
+   pointer-events:none so they cannot intercept mouse clicks or drag-select
+   events that should reach the underlying transparent text spans. */
 .react-pdf__Page__textContent mark {
+  pointer-events: none;
   opacity: 0.5;
   mix-blend-mode: multiply;
 }
