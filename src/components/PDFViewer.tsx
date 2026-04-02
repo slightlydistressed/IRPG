@@ -11,17 +11,12 @@ import type { PDFDocumentProxy } from 'pdfjs-dist';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 import {
-  ZoomIn,
-  ZoomOut,
-  RotateCcw,
   ChevronLeft,
   ChevronRight,
   Highlighter,
-  ArrowLeftRight,
-  Maximize2,
+  ScrollText,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { useDocStorage } from '../hooks/useDocStorage';
 import { HIGHLIGHT_COLORS } from '../types';
 import type { HighlightRect, SelectionState } from '../types';
 import HighlightToolbar from './HighlightToolbar';
@@ -34,9 +29,6 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL(
 
 /** Tags that should not trigger keyboard shortcuts (focus is on interactive element) */
 const INTERACTIVE_TAGS = ['INPUT', 'TEXTAREA', 'SELECT', 'A', 'BUTTON'];
-
-/** Fit modes for the PDF viewer */
-type FitMode = 'width' | 'page' | 'actual' | null;
 
 /** Padding (px) subtracted from each side when computing fit scales */
 const FIT_PADDING = 24;
@@ -51,8 +43,9 @@ const MIN_SPREAD_WIDTH = 640;
 const HIGHLIGHT_FOCUS_DURATION_MS = 2000;
 
 /**
- * Number of pages to keep pre-rendered on each side of the current page.
- * Only (2 × RENDER_WINDOW + 1) pages are in the DOM at any time.
+ * Number of pages to keep pre-rendered on each side of the current page
+ * in single-page (1p) mode. Only (2 × RENDER_WINDOW + 1) pages are in
+ * the DOM at any time.
  */
 const RENDER_WINDOW = 1;
 
@@ -62,6 +55,13 @@ const RENDER_WINDOW = 1;
  * keeps up to 6 pages in the DOM (current spread ± 1).
  */
 const SPREAD_RENDER_WINDOW = 1;
+
+/**
+ * Number of pages to keep fully rendered on each side of the current page
+ * in infinite-scroll mode. Pages outside this window render as height-
+ * preserving placeholders so scroll position stays stable.
+ */
+const SCROLL_RENDER_WINDOW = 3;
 
 /** Round a scale value to the nearest tenth */
 function roundScale(s: number): number {
@@ -83,7 +83,6 @@ export default function PDFViewer() {
   const {
     pdfFile,
     pdfLoading,
-    documentId,
     currentPage,
     setCurrentPage,
     numPages,
@@ -96,6 +95,8 @@ export default function PDFViewer() {
     scrollKey,
     selectedHighlightId,
     setSelectedHighlightId,
+    readingMode,
+    setReadingMode,
   } = useApp();
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -125,21 +126,14 @@ export default function PDFViewer() {
   // Debounce timer for the selectionchange fallback (mobile touch handles).
   const selectionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Fit mode: 'width' fills container width, 'page' fits entire page in view,
-  // 'actual' uses 100% scale, null means manual zoom (uses `scale` from context).
-  // Persisted per-document so the user's choice survives page reload.
-  const [fitMode, setFitMode] = useDocStorage<FitMode>(documentId, 'fitMode', 'width');
-  // Two-page spread mode. Persisted per-document.
-  const [spreadMode, setSpreadMode] = useDocStorage<boolean>(documentId, 'spreadMode', false);
-  // Natural (scale=1) dimensions of page 1, used to compute fit scales.
+  // Natural (scale=1) dimensions of page 1, used to compute fit-width scale.
   const [naturalPageSize, setNaturalPageSize] = useState<{ width: number; height: number } | null>(null);
   // Current container dimensions tracked via ResizeObserver.
   const [containerSize, setContainerSize] = useState<{ width: number; height: number } | null>(null);
 
-  // Spread mode is only active when the container is wide enough for two pages.
-  // This prevents it from being applied on small screens even if the user had
-  // it enabled on a wider device.
-  const isSpreadActive = spreadMode && (containerSize?.width ?? 0) >= MIN_SPREAD_WIDTH;
+  // Two-page spread is only active in '2p' mode AND when the container
+  // is wide enough. This prevents spread on narrow screens.
+  const isSpreadActive = readingMode === '2p' && (containerSize?.width ?? 0) >= MIN_SPREAD_WIDTH;
 
   const onDocumentLoadSuccess = useCallback(
     (pdf: PDFDocumentProxy) => {
@@ -407,29 +401,61 @@ export default function PDFViewer() {
     return () => clearTimeout(clearTimer);
   }, [selectedHighlightId, highlights, currentPage, setCurrentPage, setSelectedHighlightId, isSpreadActive]);
 
-  // In single-page view, scroll the container back to the top whenever the
-  // active page changes (unless a highlight-scroll is about to handle it).
+  // In single-page (1p/2p) view, scroll the container back to the top whenever
+  // the active page changes (unless a highlight-scroll is about to handle it).
+  // In scroll mode this is skipped – scrolling is managed by the user and
+  // IntersectionObserver; programmatic scroll happens via scrollKey below.
   // scrollKey forces a re-run even when currentPage hasn't changed.
   useEffect(() => {
+    if (readingMode === 'scroll') return;
     if (skipScrollToTopRef.current) {
       skipScrollToTopRef.current = false;
       return;
     }
     containerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
   // scrollKey intentionally forces a re-run even when currentPage hasn't changed
-  }, [currentPage, scrollKey]);
+  }, [currentPage, scrollKey, readingMode]);
+
+  // In scroll mode, scrollKey (incremented by scrollToPage()) drives a jump
+  // to the target page element so TOC / bookmark navigation still works.
+  useEffect(() => {
+    if (readingMode !== 'scroll' || !scrollKey) return;
+    const el = pageRefs.current.get(currentPage);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  // scrollKey intentionally forces a re-run even when currentPage hasn't changed
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scrollKey, readingMode]);
+
+  // When switching to scroll mode, immediately scroll to the current page so
+  // the user's position is preserved rather than jumping to page 1.
+  useEffect(() => {
+    if (readingMode !== 'scroll' || numPages === 0) return;
+    // Use requestAnimationFrame to wait for the DOM to fully render the new
+    // page groups before trying to scroll.
+    const raf = requestAnimationFrame(() => {
+      const el = pageRefs.current.get(currentPage);
+      if (el) el.scrollIntoView({ behavior: 'instant', block: 'start' });
+    });
+    return () => cancelAnimationFrame(raf);
+  // currentPage intentionally excluded – we only want to run on mode change
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [readingMode, numPages]);
 
   // In spread mode, currentPage must always be the start of a spread (odd page, 1-based).
   // If an external source (TOC, bookmarks) sets currentPage to an even page, snap back
   // to the preceding odd page so the correct spread is shown.
   useEffect(() => {
-    if (!spreadMode || numPages === 0) return;
+    if (readingMode !== '2p' || numPages === 0) return;
     if (currentPage % 2 === 0) {
       setCurrentPage(Math.max(1, currentPage - 1));
     }
-  }, [spreadMode, currentPage, numPages, setCurrentPage]);
+  }, [readingMode, currentPage, numPages, setCurrentPage]);
 
-  // Keyboard shortcuts: ArrowLeft/Right and PageUp/Down for page navigation
+  // Keyboard shortcuts: ArrowLeft/Right and PageUp/Down for page navigation.
+  // In scroll mode the browser handles scrolling naturally; only Home/End are
+  // intercepted (to jump to first/last page).
   // Only fires when focus is not on an interactive element to avoid conflicts.
   useEffect(() => {
     if (!pdfFile || numPages === 0) return;
@@ -437,6 +463,21 @@ export default function PDFViewer() {
     const handleKeyDown = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement).tagName;
       if (INTERACTIVE_TAGS.includes(tag)) return;
+      if (readingMode === 'scroll') {
+        // In scroll mode only handle Home/End to jump to first/last page.
+        if (e.key === 'Home') {
+          e.preventDefault();
+          const el = pageRefs.current.get(1);
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          setCurrentPage(1);
+        } else if (e.key === 'End') {
+          e.preventDefault();
+          const el = pageRefs.current.get(numPages);
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          setCurrentPage(numPages);
+        }
+        return;
+      }
       if (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'PageUp') {
         e.preventDefault();
         setCurrentPage(Math.max(1, currentPage - step));
@@ -453,7 +494,7 @@ export default function PDFViewer() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [pdfFile, numPages, currentPage, setCurrentPage, isSpreadActive]);
+  }, [pdfFile, numPages, currentPage, setCurrentPage, isSpreadActive, readingMode]);
 
   // Ctrl/Cmd + scroll wheel to zoom in or out, matching standard PDF reader
   // behaviour.  Uses a non-passive listener so we can call preventDefault()
@@ -466,14 +507,52 @@ export default function PDFViewer() {
       e.preventDefault();
       const delta = e.deltaY < 0 ? 0.1 : -0.1;
       const next = Math.max(0.5, Math.min(3, roundScale(effectiveScaleRef.current + delta)));
-      setFitMode(null);
       setScale(next);
     };
     el.addEventListener('wheel', handleWheel, { passive: false });
     return () => el.removeEventListener('wheel', handleWheel);
-  }, [setFitMode, setScale]); // containerRef is stable; effectiveScaleRef is a ref
+  }, [setScale]); // containerRef is stable; effectiveScaleRef is a ref
 
-  // Track container size via ResizeObserver so fit modes recompute on resize.
+  // IntersectionObserver for scroll mode: watches all page containers and
+  // updates currentPage to whichever page is most visible in the viewport.
+  // Reconnects whenever numPages changes (new doc loaded) or mode switches.
+  useEffect(() => {
+    if (readingMode !== 'scroll' || numPages === 0) return;
+    const container = containerRef.current;
+    if (!container) return;
+
+    let ticking = false;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (ticking) return;
+        ticking = true;
+        requestAnimationFrame(() => {
+          ticking = false;
+          // Pick the entry with the largest intersection ratio that is visible.
+          let best: IntersectionObserverEntry | null = null;
+          for (const entry of entries) {
+            if (entry.isIntersecting) {
+              if (!best || entry.intersectionRatio > best.intersectionRatio) {
+                best = entry;
+              }
+            }
+          }
+          if (best) {
+            const pg = parseInt((best.target as HTMLElement).dataset.pageNumber ?? '0', 10);
+            if (pg > 0) setCurrentPage(pg);
+          }
+        });
+      },
+      { root: container, threshold: [0.1, 0.3, 0.5, 0.7] },
+    );
+
+    // Observe all page containers that are currently in pageRefs.
+    pageRefs.current.forEach((el) => observer.observe(el));
+
+    return () => observer.disconnect();
+    // Re-run when mode or document changes; currentPage intentionally excluded
+    // so the observer doesn't reconnect on every scroll-driven page update.
+  }, [readingMode, numPages, setCurrentPage]);
   // Also capture the initial dimensions immediately on mount so effectiveScale
   // is computed from the real container width on the very first render, avoiding
   // the flash where fit-width falls back to the persisted manual scale (1.2×).
@@ -496,26 +575,16 @@ export default function PDFViewer() {
   }, []); // containerRef is stable
 
   // Compute the scale to actually use for rendering.
-  // In fit modes we derive the scale from container/page dimensions;
-  // in manual mode we use the persisted `scale` from context.
+  // fitMode is always 'width' so we always derive scale from container width.
   const effectiveScale = useMemo(() => {
-    if (!fitMode || !naturalPageSize || !containerSize) return scale;
-    if (fitMode === 'actual') return 1.0;
-    // In spread mode each page gets half the available width (minus the gap between them).
-    const spreadActive = spreadMode && containerSize.width >= MIN_SPREAD_WIDTH;
+    if (!naturalPageSize || !containerSize) return scale;
+    // In 2p mode each page gets half the available width (minus the gap between them).
+    const spreadActive = readingMode === '2p' && containerSize.width >= MIN_SPREAD_WIDTH;
     const pagesShown = spreadActive ? 2 : 1;
     const gapTotal = spreadActive ? SPREAD_GAP : 0;
     const availableWidth = Math.max(1, (containerSize.width - FIT_PADDING * 2 - gapTotal) / pagesShown);
-    if (fitMode === 'width') {
-      return availableWidth / naturalPageSize.width;
-    }
-    // 'page' – fit the whole page in the visible area
-    const availableHeight = Math.max(1, containerSize.height - FIT_PADDING * 2);
-    return Math.min(
-      availableWidth / naturalPageSize.width,
-      availableHeight / naturalPageSize.height,
-    );
-  }, [fitMode, naturalPageSize, containerSize, scale, spreadMode]);
+    return availableWidth / naturalPageSize.width;
+  }, [naturalPageSize, containerSize, scale, readingMode]);
 
   // Keep the ref in sync so the wheel-zoom handler always sees the latest value.
   useLayoutEffect(() => {
@@ -534,6 +603,21 @@ export default function PDFViewer() {
    */
   const pageGroups = useMemo((): Array<{ pages: number[]; isVisible: boolean }> => {
     if (numPages === 0) return [];
+
+    if (readingMode === 'scroll') {
+      // Scroll mode: ALL pages are in the DOM as containers. Pages within
+      // SCROLL_RENDER_WINDOW of the current page are fully rendered; others
+      // show a height-preserving placeholder. This keeps scroll position stable
+      // as the render window shifts.
+      const winStart = Math.max(1, currentPage - SCROLL_RENDER_WINDOW);
+      const winEnd = Math.min(numPages, currentPage + SCROLL_RENDER_WINDOW);
+      const groups: Array<{ pages: number[]; isVisible: boolean }> = [];
+      for (let pg = 1; pg <= numPages; pg++) {
+        groups.push({ pages: [pg], isVisible: pg >= winStart && pg <= winEnd });
+      }
+      return groups;
+    }
+
     if (isSpreadActive) {
       // Keep the current spread ± SPREAD_RENDER_WINDOW adjacent spreads in DOM.
       const halfWindow = SPREAD_RENDER_WINDOW * 2;
@@ -549,7 +633,8 @@ export default function PDFViewer() {
       }
       return groups;
     }
-    // Single-page mode: keep current page ± RENDER_WINDOW pages in DOM.
+
+    // Single-page (1p) mode: keep current page ± RENDER_WINDOW pages in DOM.
     const startPg = Math.max(1, currentPage - RENDER_WINDOW);
     const endPg   = Math.min(numPages, currentPage + RENDER_WINDOW);
     const groups: Array<{ pages: number[]; isVisible: boolean }> = [];
@@ -557,7 +642,7 @@ export default function PDFViewer() {
       groups.push({ pages: [pg], isVisible: pg === currentPage });
     }
     return groups;
-  }, [numPages, currentPage, isSpreadActive]);
+  }, [numPages, currentPage, isSpreadActive, readingMode]);
 
   const commitPageInput = useCallback(() => {
     const parsed = parseInt(pageInputValue, 10);
@@ -572,14 +657,7 @@ export default function PDFViewer() {
     setIsEditingPage(true);
   }, [currentPage]);
 
-  /** Returns className for a fit-mode toggle button, highlighted when active. */
-  const fitBtnClass = useCallback(
-    (mode: FitMode, extra = '') =>
-      `btn-icon${fitMode === mode ? ' text-[var(--color-accent)] bg-[var(--color-accent-subtle)]' : ''}${extra ? ' ' + extra : ''}`,
-    [fitMode],
-  );
-
-  if (!pdfFile) {
+    if (!pdfFile) {
     if (pdfLoading) {
       return (
         <div className="flex-1 flex items-center justify-center">
@@ -617,16 +695,19 @@ export default function PDFViewer() {
     <div className="flex flex-col h-full overflow-hidden">
       {/* Toolbar */}
       <div className="viewer-toolbar flex items-center gap-2 px-3 py-1.5 shrink-0 overflow-x-auto">
+        {/* Page navigation – prev/next only shown in 1p/2p modes */}
         <div className="toolbar-group shrink-0">
-          <button
-            className="btn-icon"
-            onClick={() => setCurrentPage(Math.max(1, currentPage - (isSpreadActive ? 2 : 1)))}
-            disabled={currentPage <= 1}
-            title="Previous page (←)"
-            aria-label="Previous page"
-          >
-            <ChevronLeft size={18} />
-          </button>
+          {readingMode !== 'scroll' && (
+            <button
+              className="btn-icon"
+              onClick={() => setCurrentPage(Math.max(1, currentPage - (isSpreadActive ? 2 : 1)))}
+              disabled={currentPage <= 1}
+              title="Previous page (←)"
+              aria-label="Previous page"
+            >
+              <ChevronLeft size={18} />
+            </button>
+          )}
           {isEditingPage ? (
             <input
               type="number"
@@ -666,92 +747,50 @@ export default function PDFViewer() {
               })()}
             </button>
           )}
-          <button
-            className="btn-icon"
-            onClick={() => setCurrentPage(Math.min(numPages, currentPage + (isSpreadActive ? 2 : 1)))}
-            disabled={currentPage + (isSpreadActive ? 2 : 1) > numPages}
-            title="Next page (→)"
-            aria-label="Next page"
-          >
-            <ChevronRight size={18} />
-          </button>
+          {readingMode !== 'scroll' && (
+            <button
+              className="btn-icon"
+              onClick={() => setCurrentPage(Math.min(numPages, currentPage + (isSpreadActive ? 2 : 1)))}
+              disabled={currentPage + (isSpreadActive ? 2 : 1) > numPages}
+              title="Next page (→)"
+              aria-label="Next page"
+            >
+              <ChevronRight size={18} />
+            </button>
+          )}
         </div>
 
+        {/* Reading mode: Scroll / 1P / 2P */}
         <div className="toolbar-group shrink-0">
           <button
-            className="btn-icon"
-            onClick={() => {
-              const next = Math.max(0.5, roundScale(effectiveScale - 0.1));
-              setFitMode(null);
-              setScale(next);
-            }}
-            disabled={effectiveScale <= 0.5}
-            title="Zoom out"
-            aria-label="Zoom out"
+            className={`btn-icon gap-1 text-xs font-semibold px-2${readingMode === 'scroll' ? ' text-[var(--color-accent)] bg-[var(--color-accent-subtle)]' : ''}`}
+            onClick={() => setReadingMode('scroll')}
+            title="Infinite scroll"
+            aria-label="Switch to infinite scroll mode"
+            aria-pressed={readingMode === 'scroll'}
           >
-            <ZoomOut size={18} />
-          </button>
-          <span className="text-sm font-mono text-[var(--color-text)] min-w-[48px] text-center" aria-live="polite" aria-label={`Zoom level ${Math.round(effectiveScale * 100)} percent`}>
-            {Math.round(effectiveScale * 100)}%
-          </span>
-          <button
-            className="btn-icon"
-            onClick={() => {
-              const next = Math.min(3, roundScale(effectiveScale + 0.1));
-              setFitMode(null);
-              setScale(next);
-            }}
-            disabled={effectiveScale >= 3}
-            title="Zoom in"
-            aria-label="Zoom in"
-          >
-            <ZoomIn size={18} />
+            <ScrollText size={14} />
+            <span className="hidden sm:inline">Scroll</span>
           </button>
           <button
-            className="btn-icon"
-            onClick={() => setFitMode('width')}
-            title="Reset to fit width"
-            aria-label="Reset to fit width"
-          >
-            <RotateCcw size={14} />
-          </button>
-        </div>
-
-        {/* Fit mode buttons + spread toggle – hidden on small mobile screens */}
-        <div className="toolbar-group shrink-0 hidden sm:flex">
-          <button
-            className={fitBtnClass('width')}
-            onClick={() => setFitMode('width')}
-            title="Fit width"
-            aria-label="Fit width"
-            aria-pressed={fitMode === 'width'}
-          >
-            <ArrowLeftRight size={14} />
-          </button>
-          <button
-            className={fitBtnClass('page')}
-            onClick={() => setFitMode('page')}
-            title="Fit page"
-            aria-label="Fit page"
-            aria-pressed={fitMode === 'page'}
-          >
-            <Maximize2 size={14} />
-          </button>
-          <button
-            className={`btn-icon text-xs font-semibold px-2${!isSpreadActive ? ' text-[var(--color-accent)] bg-[var(--color-accent-subtle)]' : ''}`}
-            onClick={() => setSpreadMode(false)}
-            title="Single page view"
+            className={`btn-icon text-xs font-semibold px-2${readingMode === '1p' ? ' text-[var(--color-accent)] bg-[var(--color-accent-subtle)]' : ''}`}
+            onClick={() => setReadingMode('1p')}
+            title="Single page"
             aria-label="Switch to single page view"
-            aria-pressed={!isSpreadActive}
+            aria-pressed={readingMode === '1p'}
           >
             1P
           </button>
           <button
-            className={`btn-icon text-xs font-semibold px-2${isSpreadActive ? ' text-[var(--color-accent)] bg-[var(--color-accent-subtle)]' : ''}`}
-            onClick={() => setSpreadMode(true)}
-            title="Two-page spread"
+            className={`btn-icon text-xs font-semibold px-2${readingMode === '2p' ? ' text-[var(--color-accent)] bg-[var(--color-accent-subtle)]' : ''}${(containerSize?.width ?? 0) < MIN_SPREAD_WIDTH ? ' opacity-40' : ''}`}
+            onClick={() => setReadingMode('2p')}
+            title={
+              (containerSize?.width ?? 0) < MIN_SPREAD_WIDTH
+                ? 'Two-page spread (requires a wider screen)'
+                : 'Two-page spread'
+            }
             aria-label="Switch to two-page spread view"
-            aria-pressed={isSpreadActive}
+            aria-pressed={readingMode === '2p'}
           >
             2P
           </button>
@@ -807,11 +846,16 @@ export default function PDFViewer() {
           }
           className="flex flex-col items-center py-4"
         >
-          {pageGroups.map(({ pages, isVisible }) => (
+          {pageGroups.map(({ pages, isVisible }) => {
+            // In scroll mode: always show the container (never display:none),
+            // but render a height-preserving placeholder for pages outside the
+            // render window so the scroll position stays stable as the window shifts.
+            const useScrollPlaceholder = readingMode === 'scroll' && !isVisible;
+            return (
             <div
               key={pages[0]}
               className={pages.length > 1 ? 'flex items-start gap-3' : undefined}
-              style={isVisible ? undefined : { display: 'none' }}
+              style={(!useScrollPlaceholder && !isVisible) ? { display: 'none' } : undefined}
             >
               {pages.map((pg) => {
                 const pageLabel = pageLabels?.[pg - 1] ?? String(pg);
@@ -825,6 +869,18 @@ export default function PDFViewer() {
                     data-page-number={pg}
                     className="shadow-lg relative"
                   >
+                    {useScrollPlaceholder && naturalPageSize ? (
+                      // Height-preserving placeholder keeps layout stable while
+                      // the page is outside the render window.
+                      <div
+                        aria-hidden="true"
+                        style={{
+                          width: Math.round(naturalPageSize.width * effectiveScale),
+                          height: Math.round(naturalPageSize.height * effectiveScale),
+                          background: 'var(--color-bg-secondary)',
+                        }}
+                      />
+                    ) : (
                     <Page
                       pageNumber={pg}
                       scale={effectiveScale}
@@ -844,6 +900,7 @@ export default function PDFViewer() {
                         ) : undefined
                       }
                     />
+                    )}
                     {/* Highlight overlay layer.
                         z-index: 1 places this container above the PDF canvas (z-index auto)
                         but below the text-selection layer (z-index 2) and annotation layer
@@ -913,7 +970,8 @@ export default function PDFViewer() {
                 );
               })}
             </div>
-          ))}
+            );
+          })}
         </Document>
 
         {/* Floating recolor toolbar – shown after a highlight is saved */}

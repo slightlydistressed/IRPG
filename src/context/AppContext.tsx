@@ -24,6 +24,7 @@ import type {
   Theme,
   SidebarTab,
   FormValues,
+  ReadingMode,
 } from '../types';
 
 // Migrate legacy single-bucket keys into per-document keys on first load.
@@ -84,6 +85,8 @@ interface AppState {
   setSidebarTab: (tab: SidebarTab) => void;
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
+  readingMode: ReadingMode;
+  setReadingMode: (mode: ReadingMode) => void;
 
   // Highlights
   highlights: Highlight[];
@@ -140,7 +143,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [pdfName, setPdfName] = useState('');
   const [numPages, setNumPages] = useState(0);
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>('toc');
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [scrollKey, setScrollKey] = useState(0);
   const [selectedHighlightId, setSelectedHighlightId] = useState<string | null>(null);
 
@@ -156,6 +159,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [formValues, setFormValues] = useDocStorage<FormValues>(documentId, 'forms', {});
   const [currentPage, setCurrentPage] = useDocStorage<number>(documentId, 'page', 1);
   const [scale, setScale] = useDocStorage<number>(documentId, 'scale', 1.2);
+  const [readingMode, setReadingMode] = useDocStorage<ReadingMode>(documentId, 'readingMode', 'scroll');
 
   // Apply theme to document
   useEffect(() => {
@@ -399,6 +403,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setSidebarTab,
         sidebarOpen,
         setSidebarOpen,
+        readingMode,
+        setReadingMode,
         highlights,
         addHighlight,
         removeHighlight,
