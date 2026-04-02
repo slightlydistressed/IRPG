@@ -1,5 +1,6 @@
 export type Theme = 'light' | 'dark';
-export type SidebarTab = 'toc' | 'highlights' | 'forms';
+export type SidebarTab = 'toc' | 'highlights' | 'forms' | 'bookmarks';
+export type ReadingMode = 'scroll' | '1p' | '2p';
 
 /**
  * A highlight's bounding rectangle expressed as fractions of the containing

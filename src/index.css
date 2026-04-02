@@ -109,10 +109,25 @@ body {
 }
 
 /* ── Layout ───────────────────────────────────────────── */
+
+/* Rail width token */
+:root {
+  --rail-width: 48px;
+  --secondary-panel-width: var(--sidebar-width-desktop, 288px);
+}
+
 .app-shell {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  overflow: hidden;
+}
+
+/* The reader workspace sits below any warning banners */
+.reader-workspace {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
   overflow: hidden;
 }
 
@@ -128,6 +143,73 @@ body {
   flex-direction: column;
   overflow: hidden;
   background-color: var(--color-bg-secondary);
+  min-width: 0;
+}
+
+/* ── Icon Rail (desktop left nav) ─────────────────────── */
+.icon-rail {
+  width: var(--rail-width);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 6px 0;
+  gap: 2px;
+  background-color: var(--color-header-bg);
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+  position: relative;
+  z-index: 20;
+}
+
+/* Hide the rail on mobile – mobile nav replaces it */
+@media (max-width: 640px) {
+  .icon-rail {
+    display: none;
+  }
+}
+
+.rail-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.65);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color 0.15s, color 0.15s;
+  position: relative;
+}
+
+.rail-btn:hover:not(:disabled) {
+  background-color: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.rail-btn:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.rail-btn-active {
+  background-color: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+}
+
+.rail-btn-bookmarked {
+  color: #fde68a;
+}
+
+.rail-divider {
+  width: 24px;
+  height: 1px;
+  background-color: rgba(255, 255, 255, 0.1);
+  margin: 4px 0;
+  flex-shrink: 0;
 }
 
 /* ── Header ───────────────────────────────────────────── */
@@ -138,7 +220,7 @@ body {
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06), var(--shadow-xs);
 }
 
-/* ── Sidebar ──────────────────────────────────────────── */
+/* ── Sidebar / Secondary Panel ────────────────────────── */
 .sidebar {
   background-color: var(--color-sidebar-bg);
   border-right: 1px solid var(--color-border);
@@ -146,10 +228,12 @@ body {
   /* flex-col and overflow-hidden are applied via Tailwind classes on the element */
 }
 
-/* Desktop: use the user-set width (CSS var set by Sidebar.tsx) and hide when closed */
+/* Desktop: secondary panel sits between rail and main content.
+   Closed = display:none; open = fixed width beside the rail. */
 @media (min-width: 641px) {
   .sidebar {
     width: var(--sidebar-width-desktop, 288px);
+    flex-shrink: 0;
   }
 
   .sidebar:not(.sidebar-open) {
@@ -169,7 +253,7 @@ body {
     max-width: 100%;
     min-width: 0;
     height: 75vh;
-    max-height: calc(100dvh - var(--header-height) - var(--mobile-nav-height));
+    max-height: calc(100dvh - var(--mobile-nav-height));
     border-right: none;
     border-top: 1px solid var(--color-border);
     border-radius: 16px 16px 0 0;
@@ -192,7 +276,7 @@ body {
   .sidebar-backdrop {
     display: block;
     position: fixed;
-    top: var(--header-height);
+    top: 0;
     left: 0;
     right: 0;
     bottom: var(--mobile-nav-height);
@@ -207,7 +291,8 @@ body {
   to   { opacity: 1; }
 }
 
-/* ── Reduce header height on mobile for more PDF space ── */
+/* ── Reduce mobile nav height if needed ─────────────── */
+/* (header-height no longer used in reader; kept for HomeView topbar) */
 @media (max-width: 640px) {
   :root {
     --header-height: 48px;

@@ -1,5 +1,5 @@
 import React from 'react';
-import { List, Highlighter, ClipboardList } from 'lucide-react';
+import { List, Highlighter, ClipboardList, Bookmark } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { SidebarTab } from '../types';
 
@@ -7,6 +7,7 @@ const TABS: { id: SidebarTab; label: string; Icon: React.ElementType }[] = [
   { id: 'toc',        label: 'Contents',   Icon: List         },
   { id: 'highlights', label: 'Highlights', Icon: Highlighter  },
   { id: 'forms',      label: 'Forms',      Icon: ClipboardList },
+  { id: 'bookmarks',  label: 'Bookmarks',  Icon: Bookmark     },
 ];
 
 /**
@@ -23,6 +24,7 @@ export default function MobileNav() {
     sidebarOpen,
     setSidebarOpen,
     highlights,
+    bookmarks,
   } = useApp();
 
   const handleTabPress = (tab: SidebarTab) => {
@@ -52,6 +54,14 @@ export default function MobileNav() {
                 aria-hidden="true"
               >
                 {highlights.length > 99 ? '99+' : highlights.length}
+              </span>
+            )}
+            {id === 'bookmarks' && bookmarks.length > 0 && (
+              <span
+                className="absolute -top-1.5 -right-2 inline-flex items-center justify-center min-w-[14px] h-[14px] px-0.5 rounded-full bg-[var(--color-accent)] text-white text-[9px] font-bold leading-none"
+                aria-hidden="true"
+              >
+                {bookmarks.length > 99 ? '99+' : bookmarks.length}
               </span>
             )}
           </div>

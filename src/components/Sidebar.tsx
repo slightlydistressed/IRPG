@@ -1,9 +1,10 @@
 import React, { useRef, useCallback, useLayoutEffect, Suspense, lazy } from 'react';
-import { List, Highlighter, ClipboardList } from 'lucide-react';
+import { List, Highlighter, ClipboardList, Bookmark } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import TableOfContents from './TableOfContents';
 import HighlightPanel from './HighlightPanel';
+import BookmarksPanel from './BookmarksPanel';
 import type { SidebarTab } from '../types';
 
 // FormPanel imports docx export utilities; lazy-load it so those heavy
@@ -11,9 +12,10 @@ import type { SidebarTab } from '../types';
 const FormPanel = lazy(() => import('./FormPanel'));
 
 const TABS: { id: SidebarTab; label: string; Icon: React.ElementType }[] = [
-  { id: 'toc', label: 'Contents', Icon: List },
-  { id: 'highlights', label: 'Highlights', Icon: Highlighter },
-  { id: 'forms', label: 'Forms', Icon: ClipboardList },
+  { id: 'toc',        label: 'Contents',   Icon: List         },
+  { id: 'highlights', label: 'Highlights', Icon: Highlighter  },
+  { id: 'forms',      label: 'Forms',      Icon: ClipboardList },
+  { id: 'bookmarks',  label: 'Bookmarks',  Icon: Bookmark     },
 ];
 
 /** Minimum sidebar width in pixels (desktop only). */
@@ -24,7 +26,7 @@ const SIDEBAR_MAX_WIDTH = 480;
 const SIDEBAR_DEFAULT_WIDTH = 288;
 
 export default function Sidebar() {
-  const { sidebarTab, setSidebarTab, sidebarOpen, setSidebarOpen, highlights } = useApp();
+  const { sidebarTab, setSidebarTab, sidebarOpen, setSidebarOpen, highlights, bookmarks } = useApp();
 
   // Persist the user's chosen sidebar width across sessions.
   // Only applied on desktop – the mobile CSS media query overrides it.
@@ -136,6 +138,14 @@ export default function Sidebar() {
                     {highlights.length > 99 ? '99+' : highlights.length}
                   </span>
                 )}
+                {id === 'bookmarks' && bookmarks.length > 0 && (
+                  <span
+                    className="absolute -top-1.5 -right-2 inline-flex items-center justify-center min-w-[14px] h-[14px] px-0.5 rounded-full bg-[var(--color-accent)] text-white text-[9px] font-bold leading-none"
+                    aria-label={`${bookmarks.length} bookmark${bookmarks.length !== 1 ? 's' : ''}`}
+                  >
+                    {bookmarks.length > 99 ? '99+' : bookmarks.length}
+                  </span>
+                )}
               </div>
               <span>{label}</span>
             </button>
@@ -151,6 +161,7 @@ export default function Sidebar() {
               <FormPanel />
             </Suspense>
           )}
+          {sidebarTab === 'bookmarks' && <BookmarksPanel />}
         </div>
 
         {/* Desktop resize handle – drag to adjust sidebar width. Hidden on mobile via CSS.
