@@ -10,7 +10,8 @@ import {
   Sun,
   HardDrive,
 } from 'lucide-react';
-import { useApp } from '../context/AppContext';
+import { useApp } from '@/context/AppContext';
+import { validatePdfFile } from '@/utils/pdfUtils';
 
 export default function HomeView() {
   const {
@@ -32,21 +33,7 @@ export default function HomeView() {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const isPdfMime = file.type === 'application/pdf';
-      const isUnknownType = !file.type;
-      const hasPdfExtension = /\.pdf$/i.test(file.name);
-
-      if (!isPdfMime && !isUnknownType && !hasPdfExtension) {
-        window.dispatchEvent(
-          new CustomEvent('irpg-app-warning', {
-            detail: `"${file.name}" is not a PDF file. Please select a valid PDF.`,
-          }),
-        );
-        e.target.value = '';
-        return;
-      }
-
+    if (file && validatePdfFile(file)) {
       setPdfFile(file);
       openReader();
     }

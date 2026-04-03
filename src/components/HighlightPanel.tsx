@@ -9,26 +9,11 @@ import {
   Copy,
   Eraser,
 } from 'lucide-react';
-import { useApp } from '../context/AppContext';
-import { HIGHLIGHT_COLORS } from '../types';
+import { useApp } from '@/context/AppContext';
+import { HIGHLIGHT_COLORS, DESKTOP_MIN_WIDTH } from '@/types';
+import { copyTextToClipboard, colorLabel } from '@/utils/exportUtils';
 
 type SortKey = 'newest' | 'oldest' | 'page-asc' | 'page-desc';
-
-/** Fallback clipboard copy using the legacy execCommand API. */
-function execCommandCopy(text: string, onSuccess: () => void) {
-  try {
-    const textarea = document.createElement('textarea');
-    textarea.value = text;
-    textarea.style.cssText = 'position:fixed;opacity:0;pointer-events:none';
-    document.body.appendChild(textarea);
-    textarea.focus();
-    textarea.select();
-    if (document.execCommand('copy')) onSuccess();
-    document.body.removeChild(textarea);
-  } catch {
-    // execCommand also unavailable – nothing more we can do
-  }
-}
 
 export default function HighlightPanel() {
   const {
@@ -93,18 +78,12 @@ export default function HighlightPanel() {
     });
     const text = lines.join('\n\n');
 
-    const onSuccess = () => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    };
-
-    if (navigator.clipboard && window.isSecureContext) {
-      navigator.clipboard.writeText(text).then(onSuccess).catch(() => {
-        execCommandCopy(text, onSuccess);
-      });
-    } else {
-      execCommandCopy(text, onSuccess);
-    }
+    copyTextToClipboard(text).then((ok) => {
+      if (ok) {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }
+    });
   }, [filtered]);
 
   const handleClearAll = useCallback(() => {
@@ -112,9 +91,6 @@ export default function HighlightPanel() {
       clearAllHighlights();
     }
   }, [clearAllHighlights]);
-
-  const colorLabel = (hex: string) =>
-    HIGHLIGHT_COLORS.find((c) => c.value === hex)?.label ?? 'Custom';
 
   if (highlights.length === 0) {
     return (
@@ -272,7 +248,7 @@ export default function HighlightPanel() {
                   className="flex-1 min-w-0 cursor-pointer"
                   onClick={() => {
                     setSelectedHighlightId(h.id);
-                    if (window.innerWidth < 640) setSidebarOpen(false);
+                    if (window.innerWidth < DESKTOP_MIN_WIDTH) setSidebarOpen(false);
                   }}
                 >
                   <p className="text-sm line-clamp-3 text-[var(--color-text)] leading-snug">

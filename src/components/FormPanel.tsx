@@ -12,9 +12,9 @@ import {
   Share2,
   Check,
 } from 'lucide-react';
-import { useApp } from '../context/AppContext';
-import { IRPG_FORMS } from '../data/irpgForms';
-import { BUILTIN_DOC_ID } from '../utils/docStorage';
+import { useApp } from '@/context/AppContext';
+import { IRPG_FORMS } from '@/data/irpgForms';
+import { BUILTIN_DOC_ID } from '@/utils/docStorage';
 import {
   copyTextToClipboard,
   copyReaderSessionToClipboard,
@@ -24,9 +24,9 @@ import {
   exportFormDocx,
   shareFormViaEmail,
   shareFormViaTeams,
-} from '../utils/exportUtils';
-import { useOutsideClick } from '../hooks/useOutsideClick';
-import type { FormSchema, FormField, DeviceAction } from '../types';
+} from '@/utils/exportUtils';
+import { useOutsideClick } from '@/hooks/useOutsideClick';
+import { type FormSchema, type FormField, type DeviceAction, DESKTOP_MIN_WIDTH } from '@/types';
 
 // ── Device action helpers ─────────────────────────────────────────────────
 
@@ -590,7 +590,7 @@ export default function FormPanel() {
     (page: number) => {
       scrollToPage(page);
       // On mobile, close sidebar so the PDF is visible
-      if (window.innerWidth < 640) setSidebarOpen(false);
+      if (window.innerWidth < DESKTOP_MIN_WIDTH) setSidebarOpen(false);
     },
     [scrollToPage, setSidebarOpen],
   );

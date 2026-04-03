@@ -1,7 +1,6 @@
-import { AppProvider } from './context/AppContext';
-import { useApp } from './context/AppContext';
-import ReaderShell from './components/ReaderShell';
-import HomeView from './components/HomeView';
+import { AppProvider, useApp } from '@/context/AppContext';
+import ReaderShell from '@/components/ReaderShell';
+import HomeView from '@/components/HomeView';
 
 function AppShell() {
   const { view } = useApp();

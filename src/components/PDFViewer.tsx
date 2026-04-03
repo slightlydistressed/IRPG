@@ -15,9 +15,8 @@ import {
   ChevronRight,
   Highlighter,
 } from 'lucide-react';
-import { useApp } from '../context/AppContext';
-import { HIGHLIGHT_COLORS } from '../types';
-import type { HighlightRect, SelectionState } from '../types';
+import { useApp } from '@/context/AppContext';
+import { HIGHLIGHT_COLORS, type HighlightRect, type SelectionState } from '@/types';
 import HighlightToolbar from './HighlightToolbar';
 
 // Configure PDF.js worker

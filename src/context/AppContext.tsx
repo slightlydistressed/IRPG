@@ -5,28 +5,29 @@ import React, {
   useCallback,
   useEffect,
 } from 'react';
-import { useLocalStorage } from '../hooks/useLocalStorage';
-import { useDocStorage } from '../hooks/useDocStorage';
+import { useLocalStorage } from '@/hooks/useLocalStorage';
+import { useDocStorage } from '@/hooks/useDocStorage';
 import {
   BUILTIN_DOC_ID,
   getDocumentId,
   migrateGlobalData,
-} from '../utils/docStorage';
+} from '@/utils/docStorage';
 import {
   savePdfToIdb,
   loadPdfFromIdb,
   deletePdfFromIdb,
   getUploadedPdfMeta,
-} from '../utils/pdfStorage';
-import type {
-  Highlight,
-  Bookmark,
-  Theme,
-  SidebarTab,
-  FormValues,
-  ReadingMode,
-} from '../types';
-import { DESKTOP_MIN_WIDTH, WIDE_VIEWPORT_2P_MIN } from '../types';
+} from '@/utils/pdfStorage';
+import {
+  type Highlight,
+  type Bookmark,
+  type Theme,
+  type SidebarTab,
+  type FormValues,
+  type ReadingMode,
+  DESKTOP_MIN_WIDTH,
+  WIDE_VIEWPORT_2P_MIN,
+} from '@/types';
 
 // Migrate legacy single-bucket keys into per-document keys on first load.
 // Runs once synchronously when the module is imported (before any render).

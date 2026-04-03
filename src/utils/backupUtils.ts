@@ -10,7 +10,7 @@
  * No server or cloud dependency — everything is local.
  */
 
-import type { Highlight, Bookmark, FormValues } from '../types';
+import type { Highlight, Bookmark, FormValues } from '@/types';
 
 // ── Schema ─────────────────────────────────────────────────────────────────
 

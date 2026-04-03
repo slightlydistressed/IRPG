@@ -1,7 +1,6 @@
 import React, { useRef, useState, useLayoutEffect } from 'react';
 import { Highlighter, X } from 'lucide-react';
-import { HIGHLIGHT_COLORS } from '../types';
-import type { SelectionState } from '../types';
+import { HIGHLIGHT_COLORS, type SelectionState } from '@/types';
 
 interface HighlightToolbarProps {
   selection: SelectionState;

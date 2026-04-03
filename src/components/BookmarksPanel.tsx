@@ -1,5 +1,6 @@
 import { Bookmark, Trash2 } from 'lucide-react';
-import { useApp } from '../context/AppContext';
+import { useApp } from '@/context/AppContext';
+import { DESKTOP_MIN_WIDTH } from '@/types';
 
 export default function BookmarksPanel() {
   const {
@@ -16,7 +17,7 @@ export default function BookmarksPanel() {
   const handleNavigate = (page: number) => {
     scrollToPage(page);
     // Close the panel on mobile after navigation
-    if (window.innerWidth <= 640) {
+    if (window.innerWidth < DESKTOP_MIN_WIDTH) {
       setSidebarOpen(false);
     }
   };

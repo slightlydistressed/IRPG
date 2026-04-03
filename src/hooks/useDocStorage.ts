@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { docKey } from '../utils/docStorage';
+import { docKey } from '@/utils/docStorage';
 
 /** Read a value from localStorage, returning `fallback` if absent or unreadable. */
 function readFromStorage<T>(key: string, fallback: T): T {

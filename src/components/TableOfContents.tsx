@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { BookmarkPlus, BookmarkMinus, ChevronRight, ChevronDown } from 'lucide-react';
 import { pdfjs } from 'react-pdf';
-import { useApp } from '../context/AppContext';
-import type { TOCItem } from '../types';
+import { useApp } from '@/context/AppContext';
+import { type TOCItem, DESKTOP_MIN_WIDTH } from '@/types';
 
 /** Minimal shape of a pdfjs-dist RefProxy needed for getPageIndex */
 interface PdfRef {
@@ -87,7 +87,7 @@ function TOCNode({
   const handleNavigate = () => {
     setCurrentPage(item.page);
     // On mobile (bottom-sheet), close the sidebar so the PDF is immediately visible.
-    if (window.innerWidth < 640) setSidebarOpen(false);
+    if (window.innerWidth < DESKTOP_MIN_WIDTH) setSidebarOpen(false);
   };
 
   const handleBookmark = (e: React.MouseEvent) => {

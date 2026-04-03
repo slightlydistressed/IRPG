@@ -12,8 +12,7 @@
  */
 
 import type { Paragraph as DocxParagraph } from 'docx';
-import type { Highlight, Bookmark, FormValues, FormSchema } from '../types';
-import { HIGHLIGHT_COLORS } from '../types';
+import { type Highlight, type Bookmark, type FormValues, type FormSchema, HIGHLIGHT_COLORS } from '@/types';
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -27,7 +26,7 @@ export interface ExportPayload {
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-function colorLabel(hex: string): string {
+export function colorLabel(hex: string): string {
   return HIGHLIGHT_COLORS.find((c) => c.value === hex)?.label ?? 'Custom';
 }
 

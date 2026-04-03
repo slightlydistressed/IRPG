@@ -1,7 +1,7 @@
 import React from 'react';
 import { List, Highlighter, ClipboardList, Bookmark } from 'lucide-react';
-import { useApp } from '../context/AppContext';
-import type { SidebarTab } from '../types';
+import { useApp } from '@/context/AppContext';
+import type { SidebarTab } from '@/types';
 
 const TABS: { id: SidebarTab; label: string; Icon: React.ElementType }[] = [
   { id: 'toc',        label: 'Contents',   Icon: List         },

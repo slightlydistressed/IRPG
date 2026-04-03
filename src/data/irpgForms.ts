@@ -9,7 +9,7 @@
  * be adjusted if a newer edition renumbers those sections.
  */
 
-import type { FormSchema } from '../types';
+import type { FormSchema } from '@/types';
 
 // ── 1. Size-Up Report ────────────────────────────────────────────────────
 
