@@ -1,5 +1,6 @@
 import React, { useRef, useState, useCallback } from 'react';
 import {
+  Columns2,
   LayoutGrid,
   List,
   Highlighter,
@@ -24,10 +25,11 @@ import {
 import type { SidebarTab } from '../types';
 
 const PANEL_TABS: { id: SidebarTab; label: string; Icon: React.ElementType }[] = [
-  { id: 'toc',        label: 'Contents',   Icon: List         },
-  { id: 'highlights', label: 'Highlights', Icon: Highlighter  },
-  { id: 'forms',      label: 'Forms',      Icon: ClipboardList },
-  { id: 'bookmarks',  label: 'Bookmarks',  Icon: Bookmark     },
+  { id: 'view',       label: 'View / Layout', Icon: Columns2      },
+  { id: 'toc',        label: 'Contents',      Icon: List          },
+  { id: 'highlights', label: 'Highlights',    Icon: Highlighter   },
+  { id: 'forms',      label: 'Forms',         Icon: ClipboardList },
+  { id: 'bookmarks',  label: 'Bookmarks',     Icon: Bookmark      },
 ];
 
 export default function IconRail() {
@@ -66,11 +68,18 @@ export default function IconRail() {
   useOutsideClick(moreMenuRef, moreMenuOpen, closeMoreMenu, moreMenuBtnRef);
 
   const handlePanelToggle = (tab: SidebarTab) => {
-    if (sidebarOpen && sidebarTab === tab) {
-      setSidebarOpen(false);
-    } else {
+    if (window.innerWidth >= 641) {
+      // Desktop: sidebar is always open — just switch the active tab.
       setSidebarTab(tab);
       setSidebarOpen(true);
+    } else {
+      // Mobile: toggle the drawer open/closed.
+      if (sidebarOpen && sidebarTab === tab) {
+        setSidebarOpen(false);
+      } else {
+        setSidebarTab(tab);
+        setSidebarOpen(true);
+      }
     }
   };
 

@@ -1,10 +1,11 @@
 import React, { useRef, useCallback, useLayoutEffect, Suspense, lazy } from 'react';
-import { List, Highlighter, ClipboardList, Bookmark } from 'lucide-react';
+import { Columns2, List, Highlighter, ClipboardList, Bookmark } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import TableOfContents from './TableOfContents';
 import HighlightPanel from './HighlightPanel';
 import BookmarksPanel from './BookmarksPanel';
+import ViewLayoutPanel from './ViewLayoutPanel';
 import type { SidebarTab } from '../types';
 
 // FormPanel imports docx export utilities; lazy-load it so those heavy
@@ -12,10 +13,11 @@ import type { SidebarTab } from '../types';
 const FormPanel = lazy(() => import('./FormPanel'));
 
 const TABS: { id: SidebarTab; label: string; Icon: React.ElementType }[] = [
-  { id: 'toc',        label: 'Contents',   Icon: List         },
-  { id: 'highlights', label: 'Highlights', Icon: Highlighter  },
+  { id: 'view',       label: 'View',       Icon: Columns2      },
+  { id: 'toc',        label: 'Contents',   Icon: List          },
+  { id: 'highlights', label: 'Highlights', Icon: Highlighter   },
   { id: 'forms',      label: 'Forms',      Icon: ClipboardList },
-  { id: 'bookmarks',  label: 'Bookmarks',  Icon: Bookmark     },
+  { id: 'bookmarks',  label: 'Bookmarks',  Icon: Bookmark      },
 ];
 
 /** Minimum sidebar width in pixels (desktop only). */
@@ -154,6 +156,7 @@ export default function Sidebar() {
 
         {/* Tab content */}
         <div className="flex-1 overflow-y-auto">
+          {sidebarTab === 'view' && <ViewLayoutPanel />}
           {sidebarTab === 'toc' && <TableOfContents />}
           {sidebarTab === 'highlights' && <HighlightPanel />}
           {sidebarTab === 'forms' && (

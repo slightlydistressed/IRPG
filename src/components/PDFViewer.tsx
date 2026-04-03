@@ -14,7 +14,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Highlighter,
-  ScrollText,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { HIGHLIGHT_COLORS } from '../types';
@@ -96,7 +95,6 @@ export default function PDFViewer() {
     selectedHighlightId,
     setSelectedHighlightId,
     readingMode,
-    setReadingMode,
   } = useApp();
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -758,42 +756,6 @@ export default function PDFViewer() {
               <ChevronRight size={18} />
             </button>
           )}
-        </div>
-
-        {/* Reading mode: Scroll / 1P / 2P */}
-        <div className="toolbar-group shrink-0">
-          <button
-            className={`btn-icon gap-1 text-xs font-semibold px-2${readingMode === 'scroll' ? ' text-[var(--color-accent)] bg-[var(--color-accent-subtle)]' : ''}`}
-            onClick={() => setReadingMode('scroll')}
-            title="Infinite scroll"
-            aria-label="Switch to infinite scroll mode"
-            aria-pressed={readingMode === 'scroll'}
-          >
-            <ScrollText size={14} />
-            <span className="hidden sm:inline">Scroll</span>
-          </button>
-          <button
-            className={`btn-icon text-xs font-semibold px-2${readingMode === '1p' ? ' text-[var(--color-accent)] bg-[var(--color-accent-subtle)]' : ''}`}
-            onClick={() => setReadingMode('1p')}
-            title="Single page"
-            aria-label="Switch to single page view"
-            aria-pressed={readingMode === '1p'}
-          >
-            1P
-          </button>
-          <button
-            className={`btn-icon text-xs font-semibold px-2${readingMode === '2p' ? ' text-[var(--color-accent)] bg-[var(--color-accent-subtle)]' : ''}${(containerSize?.width ?? 0) < MIN_SPREAD_WIDTH ? ' opacity-40' : ''}`}
-            onClick={() => setReadingMode('2p')}
-            title={
-              (containerSize?.width ?? 0) < MIN_SPREAD_WIDTH
-                ? 'Two-page spread (requires a wider screen)'
-                : 'Two-page spread'
-            }
-            aria-label="Switch to two-page spread view"
-            aria-pressed={readingMode === '2p'}
-          >
-            2P
-          </button>
         </div>
 
         {/* Colour pre-selector – hidden on mobile (the floating HighlightToolbar has its own) */}

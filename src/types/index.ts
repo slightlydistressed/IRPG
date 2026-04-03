@@ -1,5 +1,5 @@
 export type Theme = 'light' | 'dark';
-export type SidebarTab = 'toc' | 'highlights' | 'forms' | 'bookmarks';
+export type SidebarTab = 'view' | 'toc' | 'highlights' | 'forms' | 'bookmarks';
 export type ReadingMode = 'scroll' | '1p' | '2p';
 
 /**
