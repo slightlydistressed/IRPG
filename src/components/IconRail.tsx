@@ -16,12 +16,8 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useOutsideClick } from '../hooks/useOutsideClick';
-import {
-  buildDocBackup,
-  downloadDocBackup,
-  parseDocBackup,
-  readFileAsText,
-} from '../utils/backupUtils';
+import { useBackupHandlers } from '../hooks/useBackupHandlers';
+import { validatePdfFile } from '../utils/pdfUtils';
 import type { SidebarTab } from '../types';
 import { DESKTOP_MIN_WIDTH } from '../types';
 
@@ -51,11 +47,7 @@ export default function IconRail() {
     addBookmark,
     removeBookmark,
     bookmarks,
-    documentId,
     highlights,
-    formValues,
-    scale,
-    restoreDocumentData,
   } = useApp();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -63,7 +55,8 @@ export default function IconRail() {
   const moreMenuRef = useRef<HTMLDivElement>(null);
   const moreMenuBtnRef = useRef<HTMLButtonElement>(null);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
-  const [importError, setImportError] = useState<string | null>(null);
+
+  const { handleExportBackup, handleImportBackupFile, importError } = useBackupHandlers();
 
   const closeMoreMenu = useCallback(() => setMoreMenuOpen(false), []);
   useOutsideClick(moreMenuRef, moreMenuOpen, closeMoreMenu, moreMenuBtnRef);
@@ -96,87 +89,12 @@ export default function IconRail() {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const isPdfMime = file.type === 'application/pdf';
-      const isUnknownType = !file.type;
-      const hasPdfExtension = /\.pdf$/i.test(file.name);
-      if (!isPdfMime && !isUnknownType && !hasPdfExtension) {
-        window.dispatchEvent(
-          new CustomEvent('irpg-app-warning', {
-            detail: `"${file.name}" is not a PDF file. Please select a valid PDF.`,
-          }),
-        );
-        e.target.value = '';
-        return;
-      }
+    if (file && validatePdfFile(file)) {
       setPdfFile(file);
       openReader();
     }
     e.target.value = '';
   };
-
-  const handleExportBackup = useCallback(() => {
-    if (!pdfName) return;
-    const backup = buildDocBackup(
-      documentId,
-      pdfName,
-      highlights,
-      bookmarks,
-      formValues,
-      currentPage,
-      scale,
-    );
-    downloadDocBackup(backup);
-  }, [documentId, pdfName, highlights, bookmarks, formValues, currentPage, scale]);
-
-  const handleImportBackupFile = useCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      e.target.value = '';
-      if (!file) return;
-
-      setImportError(null);
-      let text: string;
-      try {
-        text = await readFileAsText(file);
-      } catch {
-        setImportError('Could not read the backup file.');
-        setTimeout(() => setImportError(null), 5000);
-        return;
-      }
-
-      const backup = parseDocBackup(text);
-      if (!backup) {
-        setImportError('The selected file is not a valid IRPG Reader backup.');
-        setTimeout(() => setImportError(null), 5000);
-        return;
-      }
-
-      if (backup.docId !== documentId) {
-        const proceed = window.confirm(
-          `This backup is for "${backup.pdfName}" (not the currently open document).\n\n` +
-            `Importing it will replace the current document's highlights, bookmarks, and form data with data from that backup.\n\n` +
-            `Continue anyway?`,
-        );
-        if (!proceed) return;
-      } else {
-        const proceed = window.confirm(
-          `Restore backup from ${new Date(backup.exportedAt).toLocaleString()}?\n\n` +
-            `This will replace your current highlights, bookmarks, and form data for this document.`,
-        );
-        if (!proceed) return;
-      }
-
-      restoreDocumentData({
-        highlights: backup.highlights,
-        bookmarks: backup.bookmarks,
-        formValues: backup.formValues,
-        currentPage: backup.currentPage,
-        scale: backup.scale,
-      });
-    },
-    [documentId, restoreDocumentData],
-  );
 
   const bookmarkedNow = isBookmarked(currentPage);
 

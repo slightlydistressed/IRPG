@@ -27,7 +27,7 @@ export interface ExportPayload {
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-function colorLabel(hex: string): string {
+export function colorLabel(hex: string): string {
   return HIGHLIGHT_COLORS.find((c) => c.value === hex)?.label ?? 'Custom';
 }
 
