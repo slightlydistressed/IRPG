@@ -7,7 +7,7 @@ import {
   useMemo,
 } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
-import type { PDFDocumentProxy } from 'pdfjs-dist';
+import type { DocumentProps } from 'react-pdf';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 import {
@@ -132,8 +132,8 @@ export default function PDFViewer() {
   // is wide enough. This prevents spread on narrow screens.
   const isSpreadActive = readingMode === '2p' && (containerSize?.width ?? 0) >= MIN_SPREAD_WIDTH;
 
-  const onDocumentLoadSuccess = useCallback(
-    (pdf: PDFDocumentProxy) => {
+  const onDocumentLoadSuccess = useCallback<NonNullable<DocumentProps['onLoadSuccess']>>(
+    (pdf) => {
       // Get page labels (independent, fire-and-forget).
       pdf
         .getPageLabels()
