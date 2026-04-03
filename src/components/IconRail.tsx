@@ -23,6 +23,7 @@ import {
   readFileAsText,
 } from '../utils/backupUtils';
 import type { SidebarTab } from '../types';
+import { DESKTOP_MIN_WIDTH } from '../types';
 
 const PANEL_TABS: { id: SidebarTab; label: string; Icon: React.ElementType }[] = [
   { id: 'view',       label: 'View / Layout', Icon: Columns2      },
@@ -68,7 +69,7 @@ export default function IconRail() {
   useOutsideClick(moreMenuRef, moreMenuOpen, closeMoreMenu, moreMenuBtnRef);
 
   const handlePanelToggle = (tab: SidebarTab) => {
-    if (window.innerWidth >= 641) {
+    if (window.innerWidth >= DESKTOP_MIN_WIDTH) {
       // Desktop: sidebar is always open — just switch the active tab.
       setSidebarTab(tab);
       setSidebarOpen(true);

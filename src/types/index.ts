@@ -2,6 +2,13 @@ export type Theme = 'light' | 'dark';
 export type SidebarTab = 'view' | 'toc' | 'highlights' | 'forms' | 'bookmarks';
 export type ReadingMode = 'scroll' | '1p' | '2p';
 
+/** Minimum viewport width (px) at which the desktop layout activates.
+ *  Matches the CSS @media (min-width: 641px) breakpoint in index.css. */
+export const DESKTOP_MIN_WIDTH = 641;
+
+/** Minimum viewport width (px) considered wide enough to default to 2P reading mode. */
+export const WIDE_VIEWPORT_2P_MIN = 1000;
+
 /**
  * A highlight's bounding rectangle expressed as fractions of the containing
  * page element's width/height (0–1).  Storing percentages keeps the overlay
