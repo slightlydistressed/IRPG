@@ -26,6 +26,7 @@ import type {
   FormValues,
   ReadingMode,
 } from '../types';
+import { DESKTOP_MIN_WIDTH, WIDE_VIEWPORT_2P_MIN } from '../types';
 
 // Migrate legacy single-bucket keys into per-document keys on first load.
 // Runs once synchronously when the module is imported (before any render).
@@ -142,8 +143,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfName, setPdfName] = useState('');
   const [numPages, setNumPages] = useState(0);
-  const [sidebarTab, setSidebarTab] = useState<SidebarTab>('toc');
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  // Default to the View/Layout panel rather than Contents.
+  // On desktop, start with the sidebar open; on mobile, start closed.
+  const [sidebarTab, setSidebarTab] = useState<SidebarTab>('view');
+  const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth >= DESKTOP_MIN_WIDTH);
   const [scrollKey, setScrollKey] = useState(0);
   const [selectedHighlightId, setSelectedHighlightId] = useState<string | null>(null);
 
@@ -159,7 +162,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [formValues, setFormValues] = useDocStorage<FormValues>(documentId, 'forms', {});
   const [currentPage, setCurrentPage] = useDocStorage<number>(documentId, 'page', 1);
   const [scale, setScale] = useDocStorage<number>(documentId, 'scale', 1.2);
-  const [readingMode, setReadingMode] = useDocStorage<ReadingMode>(documentId, 'readingMode', 'scroll');
+  // Default reading mode: 2P on wide desktop screens, scroll on narrow / mobile.
+  // This only applies when there is no persisted value for the document.
+  const [readingMode, setReadingMode] = useDocStorage<ReadingMode>(documentId, 'readingMode', window.innerWidth >= WIDE_VIEWPORT_2P_MIN ? '2p' : 'scroll');
 
   // Apply theme to document
   useEffect(() => {

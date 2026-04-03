@@ -228,16 +228,12 @@ body {
   /* flex-col and overflow-hidden are applied via Tailwind classes on the element */
 }
 
-/* Desktop: secondary panel sits between rail and main content.
-   Closed = display:none; open = fixed width beside the rail. */
+/* Desktop: secondary panel always sits between the rail and the main content.
+   It is always visible on desktop and never collapses. */
 @media (min-width: 641px) {
   .sidebar {
     width: var(--sidebar-width-desktop, 288px);
     flex-shrink: 0;
-  }
-
-  .sidebar:not(.sidebar-open) {
-    display: none;
   }
 }
 
