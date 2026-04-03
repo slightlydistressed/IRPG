@@ -88,5 +88,5 @@ export function useBackupHandlers() {
     [documentId, restoreDocumentData],
   );
 
-  return { handleExportBackup, handleImportBackupFile, importError, setImportError };
+  return { handleExportBackup, handleImportBackupFile, importError };
 }
