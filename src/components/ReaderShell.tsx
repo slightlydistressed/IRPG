@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useApp } from '../context/AppContext';
+import { useApp } from '@/context/AppContext';
 import IconRail from './IconRail';
 import Sidebar from './Sidebar';
 import PDFViewer from './PDFViewer';

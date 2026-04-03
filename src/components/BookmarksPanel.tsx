@@ -1,6 +1,6 @@
 import { Bookmark, Trash2 } from 'lucide-react';
-import { useApp } from '../context/AppContext';
-import { DESKTOP_MIN_WIDTH } from '../types';
+import { useApp } from '@/context/AppContext';
+import { DESKTOP_MIN_WIDTH } from '@/types';
 
 export default function BookmarksPanel() {
   const {

@@ -9,9 +9,9 @@ import {
   Copy,
   Eraser,
 } from 'lucide-react';
-import { useApp } from '../context/AppContext';
-import { HIGHLIGHT_COLORS, DESKTOP_MIN_WIDTH } from '../types';
-import { copyTextToClipboard, colorLabel } from '../utils/exportUtils';
+import { useApp } from '@/context/AppContext';
+import { HIGHLIGHT_COLORS, DESKTOP_MIN_WIDTH } from '@/types';
+import { copyTextToClipboard, colorLabel } from '@/utils/exportUtils';
 
 type SortKey = 'newest' | 'oldest' | 'page-asc' | 'page-desc';
 

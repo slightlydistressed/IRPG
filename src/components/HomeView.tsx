@@ -10,8 +10,8 @@ import {
   Sun,
   HardDrive,
 } from 'lucide-react';
-import { useApp } from '../context/AppContext';
-import { validatePdfFile } from '../utils/pdfUtils';
+import { useApp } from '@/context/AppContext';
+import { validatePdfFile } from '@/utils/pdfUtils';
 
 export default function HomeView() {
   const {

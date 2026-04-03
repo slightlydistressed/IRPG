@@ -1,11 +1,11 @@
 import { useState, useCallback } from 'react';
-import { useApp } from '../context/AppContext';
+import { useApp } from '@/context/AppContext';
 import {
   buildDocBackup,
   downloadDocBackup,
   parseDocBackup,
   readFileAsText,
-} from '../utils/backupUtils';
+} from '@/utils/backupUtils';
 
 /**
  * Shared hook for backup export and import, used by both Header (mobile) and

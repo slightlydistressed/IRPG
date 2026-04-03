@@ -12,10 +12,10 @@ import {
   FolderOpen,
   MoreVertical,
 } from 'lucide-react';
-import { useApp } from '../context/AppContext';
-import { useOutsideClick } from '../hooks/useOutsideClick';
-import { useBackupHandlers } from '../hooks/useBackupHandlers';
-import { validatePdfFile } from '../utils/pdfUtils';
+import { useApp } from '@/context/AppContext';
+import { useOutsideClick } from '@/hooks/useOutsideClick';
+import { useBackupHandlers } from '@/hooks/useBackupHandlers';
+import { validatePdfFile } from '@/utils/pdfUtils';
 
 export default function Header() {
   const {

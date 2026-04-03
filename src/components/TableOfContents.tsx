@@ -1,9 +1,8 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { BookmarkPlus, BookmarkMinus, ChevronRight, ChevronDown } from 'lucide-react';
 import { pdfjs } from 'react-pdf';
-import { useApp } from '../context/AppContext';
-import type { TOCItem } from '../types';
-import { DESKTOP_MIN_WIDTH } from '../types';
+import { useApp } from '@/context/AppContext';
+import { type TOCItem, DESKTOP_MIN_WIDTH } from '@/types';
 
 /** Minimal shape of a pdfjs-dist RefProxy needed for getPageIndex */
 interface PdfRef {

@@ -12,9 +12,9 @@ import {
   Share2,
   Check,
 } from 'lucide-react';
-import { useApp } from '../context/AppContext';
-import { IRPG_FORMS } from '../data/irpgForms';
-import { BUILTIN_DOC_ID } from '../utils/docStorage';
+import { useApp } from '@/context/AppContext';
+import { IRPG_FORMS } from '@/data/irpgForms';
+import { BUILTIN_DOC_ID } from '@/utils/docStorage';
 import {
   copyTextToClipboard,
   copyReaderSessionToClipboard,
@@ -24,10 +24,9 @@ import {
   exportFormDocx,
   shareFormViaEmail,
   shareFormViaTeams,
-} from '../utils/exportUtils';
-import { useOutsideClick } from '../hooks/useOutsideClick';
-import type { FormSchema, FormField, DeviceAction } from '../types';
-import { DESKTOP_MIN_WIDTH } from '../types';
+} from '@/utils/exportUtils';
+import { useOutsideClick } from '@/hooks/useOutsideClick';
+import { type FormSchema, type FormField, type DeviceAction, DESKTOP_MIN_WIDTH } from '@/types';
 
 // ── Device action helpers ─────────────────────────────────────────────────
 

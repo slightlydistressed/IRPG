@@ -1,12 +1,12 @@
 import React, { useRef, useCallback, useLayoutEffect, Suspense, lazy } from 'react';
 import { Columns2, List, Highlighter, ClipboardList, Bookmark } from 'lucide-react';
-import { useApp } from '../context/AppContext';
-import { useLocalStorage } from '../hooks/useLocalStorage';
+import { useApp } from '@/context/AppContext';
+import { useLocalStorage } from '@/hooks/useLocalStorage';
 import TableOfContents from './TableOfContents';
 import HighlightPanel from './HighlightPanel';
 import BookmarksPanel from './BookmarksPanel';
 import ViewLayoutPanel from './ViewLayoutPanel';
-import type { SidebarTab } from '../types';
+import type { SidebarTab } from '@/types';
 
 // FormPanel imports docx export utilities; lazy-load it so those heavy
 // modules are deferred until the user first opens the Forms tab.

@@ -14,12 +14,11 @@ import {
   Download,
   FolderOpen,
 } from 'lucide-react';
-import { useApp } from '../context/AppContext';
-import { useOutsideClick } from '../hooks/useOutsideClick';
-import { useBackupHandlers } from '../hooks/useBackupHandlers';
-import { validatePdfFile } from '../utils/pdfUtils';
-import type { SidebarTab } from '../types';
-import { DESKTOP_MIN_WIDTH } from '../types';
+import { useApp } from '@/context/AppContext';
+import { useOutsideClick } from '@/hooks/useOutsideClick';
+import { useBackupHandlers } from '@/hooks/useBackupHandlers';
+import { validatePdfFile } from '@/utils/pdfUtils';
+import { type SidebarTab, DESKTOP_MIN_WIDTH } from '@/types';
 
 const PANEL_TABS: { id: SidebarTab; label: string; Icon: React.ElementType }[] = [
   { id: 'view',       label: 'View / Layout', Icon: Columns2      },
